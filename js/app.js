@@ -637,3 +637,10 @@ search.addEventListener("input", () => {
   const session = await initAuth();
   await updateAuthUi(session);
 })();
+
+// ---------- PWA: Service Worker registrieren (Installierbarkeit) ----------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => { /* PWA-Installation ist ein Extra, kein hartes Erfordernis */ });
+  });
+}
