@@ -248,4 +248,21 @@ ul.zutaten li{ border-bottom:1px dashed var(--line); padding-bottom:7px; font-si
 }
 .toast.toast-error{ background:var(--danger); }
 
+/* login gate (ganze App erfordert Anmeldung, wie bei der Weinkeller-App) */
+.login-gate{
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.login-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:28px 26px;
+  max-width:360px; width:100%; box-shadow:var(--shadow);
+}
+.login-card .brand{ margin-bottom:6px; }
+.login-hint{ color:var(--muted); font-size:.88rem; margin:14px 0 18px; }
+
+/* nur mit Bearbeitungsrechten sichtbar (Rolle != "viewer") */
+body:not(.can-edit) #add-btn,
+body:not(.can-edit) #detail-actions{
+  display:none !important;
+}
+
 [hidden]{ display:none !important; }

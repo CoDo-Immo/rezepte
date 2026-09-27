@@ -36,6 +36,12 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 // ---------- DOM refs ----------
+const loginGate = document.getElementById("login-gate");
+const appShell = document.getElementById("app-shell");
+const loginEmail = document.getElementById("login-email");
+const loginPassword = document.getElementById("login-password");
+const loginError = document.getElementById("login-error");
+const loginSubmit = document.getElementById("login-submit");
 const viewHome = document.getElementById("view-home");
 const viewList = document.getElementById("view-list");
 const viewDetail = document.getElementById("view-detail");
@@ -543,64 +549,61 @@ function backFromDetail() {
 }
 
 // ---------- auth ----------
+// Die ganze App erfordert eine Anmeldung (wie bei der Weinkeller-App); die Rolle
+// "viewer" darf laut Datenbank-Regeln aber nichts anlegen/ändern/löschen — dafür
+// werden Bearbeiten-/Löschen-/Neu-Icons per CSS ausgeblendet (body.can-edit).
 function requireEdit(action) {
   if (canEdit()) { action(); return; }
-  showLoginModal(action);
+  showToast("Diese Anmeldung hat nur Lesezugriff.", true);
 }
 
-function showLoginModal(onSuccess) {
-  modalBox.innerHTML = `
-    <h3>Anmelden</h3>
-    <p>Zum Bearbeiten oder Löschen ist eine Anmeldung nötig.</p>
-    <div class="field">
-      <label for="m-email">E-Mail</label>
-      <input id="m-email" type="email" autocomplete="username">
-    </div>
-    <div class="field" style="margin-top:10px">
-      <label for="m-password">Passwort</label>
-      <input id="m-password" type="password" autocomplete="current-password">
-    </div>
-    <div class="error-msg" id="m-error"></div>
-    <div class="form-actions">
-      <button class="btn" id="m-cancel">Abbrechen</button>
-      <button class="btn btn-primary" id="m-login">Anmelden</button>
-    </div>
-  `;
-  modalBackdrop.hidden = false;
-  document.getElementById("m-cancel").addEventListener("click", closeModal);
-  const doLogin = async () => {
-    const email = document.getElementById("m-email").value.trim();
-    const password = document.getElementById("m-password").value;
-    try {
-      await signIn(email, password);
-      closeModal();
-      showToast("Angemeldet.");
-      if (onSuccess) onSuccess();
-    } catch (e) {
-      document.getElementById("m-error").textContent = "Anmeldung fehlgeschlagen. E-Mail/Passwort prüfen.";
-    }
-  };
-  document.getElementById("m-login").addEventListener("click", doLogin);
-  modalBox.querySelectorAll("input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); }));
+let recipesLoadedOnce = false;
+
+function showLoginGate() {
+  loginGate.hidden = false;
+  appShell.hidden = true;
+  loginError.textContent = "";
+  loginPassword.value = "";
+  loginEmail.focus();
+}
+
+async function showAppShell() {
+  loginGate.hidden = true;
+  appShell.hidden = false;
+  if (!recipesLoadedOnce) {
+    recipesLoadedOnce = true;
+    await loadRecipes();
+  }
 }
 
 function updateAuthUi(session) {
-  if (session && canEdit()) {
-    authBtn.textContent = "Abmelden";
-    authBtn.classList.add("is-logged-in");
-  } else {
-    authBtn.textContent = "Anmelden";
-    authBtn.classList.remove("is-logged-in");
-  }
+  document.body.classList.toggle("can-edit", canEdit());
+  if (session) showAppShell();
+  else { recipesLoadedOnce = false; showLoginGate(); }
 }
 
-authBtn.addEventListener("click", async () => {
-  if (getSession()) {
-    await signOut();
-    showToast("Abgemeldet.");
-  } else {
-    showLoginModal();
+async function doLogin() {
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value;
+  loginSubmit.disabled = true;
+  try {
+    await signIn(email, password);
+    loginError.textContent = "";
+  } catch (e) {
+    loginError.textContent = "Anmeldung fehlgeschlagen. E-Mail/Passwort prüfen.";
+  } finally {
+    loginSubmit.disabled = false;
   }
+}
+loginSubmit.addEventListener("click", doLogin);
+[loginEmail, loginPassword].forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); }));
+
+authBtn.addEventListener("click", async () => {
+  await signOut();
+  search.value = "";
+  currentSearchTerm = "";
+  currentCategory = null;
+  showToast("Abgemeldet.");
 });
 
 onAuthChange(updateAuthUi);
@@ -630,9 +633,7 @@ search.addEventListener("input", () => {
 
 // ---------- init ----------
 (async function init() {
-  const session = await initAuth();
-  updateAuthUi(session);
-  onAuthChange(() => {}); // already wired above
   setView("home");
-  await loadRecipes();
+  const session = await initAuth();
+  await updateAuthUi(session);
 })();

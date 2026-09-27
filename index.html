@@ -8,7 +8,30 @@
 </head>
 <body>
 
-<div class="app">
+<div class="login-gate" id="login-gate">
+  <div class="login-card">
+    <div class="brand" style="cursor:default">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 11.5C4 7 7.6 3.5 12 3.5s8 3.5 8 8c0 5-4 8-8 9-4-1-8-4-8-9Z"/><path d="M12 8v5"/><path d="M9.5 9.8h5"/></svg>
+      <div>
+        <p class="brand-name">Rezepte</p>
+        <p class="brand-sub">Rezeptarchiv · aus der OneNote-Ablage</p>
+      </div>
+    </div>
+    <p class="login-hint">Bitte anmelden, um die Rezepte zu sehen.</p>
+    <div class="field">
+      <label for="login-email">E-Mail</label>
+      <input id="login-email" type="email" autocomplete="username">
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label for="login-password">Passwort</label>
+      <input id="login-password" type="password" autocomplete="current-password">
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <button class="btn btn-primary" id="login-submit" style="width:100%; margin-top:16px">Anmelden</button>
+  </div>
+</div>
+
+<div class="app" id="app-shell" hidden>
 
   <div class="topbar">
     <div class="brand" id="home-btn" role="button" tabindex="0" aria-label="Zur Startseite">
@@ -20,7 +43,7 @@
     </div>
     <div class="topbar-actions">
       <span class="recipe-count" id="total-count"></span>
-      <button class="auth-btn" id="auth-btn">Anmelden</button>
+      <button class="auth-btn" id="auth-btn">Abmelden</button>
     </div>
   </div>
 

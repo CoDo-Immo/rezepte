@@ -19,11 +19,13 @@ also direkt über GitHub Pages oder jeden anderen statischen Hoster ausliefern.
   (Bucket `rezeptbilder`), mit Vorschau, Ersetzen und Entfernen im Formular;
   Bild erscheint in der Detailansicht und als Thumbnail in der Listenkarte
 - Bearbeiten- und Löschen-Icons in der Detailansicht, „Neues Rezept“-Button
-  in der Listenansicht
-- Login (Supabase Auth) für Bearbeiten/Löschen/Neuanlegen — Lesen ist ohne
-  Anmeldung möglich. Es gilt dieselbe Rollenlogik wie in der Weinkeller-App:
-  ein Konto mit Rolle `viewer` darf nur lesen, alle anderen angemeldeten
-  Konten dürfen schreiben.
+  in der Listenansicht — beide nur sichtbar mit Schreibrechten
+- Login-Pflicht für die ganze App (Supabase Auth), exakt wie bei der
+  Weinkeller-App: ohne Anmeldung ist nichts sichtbar, auch kein Lesen. Ein
+  Konto mit Rolle `viewer` darf nur lesen, alle anderen angemeldeten Konten
+  dürfen zusätzlich anlegen/ändern/löschen. Es sind dieselben Konten wie im
+  Weinkeller nutzbar, da Supabase Auth projektweit gilt (kein separates
+  Konto pro App nötig).
 
 ## Lokal starten
 
@@ -59,9 +61,12 @@ git push -u origin main
 
 Die Zugangsdaten in `js/config.js` (Projekt-URL + `anon`-Key) sind bewusst
 öffentlich sichtbar — das ist bei Supabase so vorgesehen. Der eigentliche
-Schutz erfolgt über Row-Level-Security-Regeln in der Datenbank: Lesen ist für
-alle offen, Schreiben (Anlegen/Ändern/Löschen) ist nur mit gültiger Anmeldung
-möglich (ausser bei der Rolle `viewer`).
+Schutz erfolgt über Row-Level-Security-Regeln in der Datenbank: Lesen
+(`SELECT`) ist nur für angemeldete Nutzer erlaubt (`auth.role() =
+'authenticated'`, wie bei `wines`), Schreiben (Anlegen/Ändern/Löschen) ist
+zusätzlich für die Rolle `viewer` gesperrt. Bilder im Storage-Bucket
+`rezeptbilder` bleiben bewusst öffentlich lesbar (wie `weinbilder`), da
+`<img>`-Tags keine Auth-Header mitschicken können.
 
 Beim Aufsetzen dieser App wurde zusätzlich festgestellt und behoben, dass der
 Tabelle `rezepte` (im Gegensatz zu `wines`) die grundlegenden Postgres-Grants
