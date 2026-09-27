@@ -28,8 +28,12 @@ function esc(str) {
 // ---------- state ----------
 let RECIPES = [];
 let WINES_BY_ID = {};
+let ALL_WINES = null;
 let currentCategory = null;
 let currentSearchTerm = "";
+const IMAGE_BUCKET = "rezeptbilder";
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 // ---------- DOM refs ----------
 const viewHome = document.getElementById("view-home");
@@ -83,12 +87,41 @@ async function loadRecipes() {
   renderCategoryGrid();
 }
 
-async function loadWineNames(ids) {
-  const missing = ids.filter((id) => !(id in WINES_BY_ID));
-  if (!missing.length) return;
-  const { data, error } = await supabase.from("wines").select("id, name, weingut, jahr").in("id", missing);
-  if (error) return; // Weinempfehlung ist optional — bei Fehler einfach ausblenden
-  (data || []).forEach((w) => { WINES_BY_ID[w.id] = w; });
+// Lädt einmalig alle Weine (für Anzeige + Such-Auswahl in der Weinempfehlung).
+async function ensureWinesLoaded() {
+  if (ALL_WINES) return ALL_WINES;
+  const { data, error } = await supabase.from("wines").select("id, name, weingut, jahr").order("name", { ascending: true });
+  ALL_WINES = error ? [] : (data || []);
+  ALL_WINES.forEach((w) => { WINES_BY_ID[w.id] = w; });
+  return ALL_WINES;
+}
+
+function wineLabel(w) {
+  return `${w.name}${w.weingut ? " – " + w.weingut : ""}${w.jahr ? " " + w.jahr : ""}`;
+}
+
+// ---------- Bild-Upload ----------
+async function uploadRecipeImage(file) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const rand = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const path = `${rand}.${ext}`;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+  if (error) throw error;
+  const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function storagePathFromUrl(url) {
+  const marker = `/object/public/${IMAGE_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return decodeURIComponent(url.slice(idx + marker.length));
+}
+
+async function deleteRecipeImage(url) {
+  const path = storagePathFromUrl(url);
+  if (!path) return;
+  try { await supabase.storage.from(IMAGE_BUCKET).remove([path]); } catch (_e) { /* best effort */ }
 }
 
 function totalCountForCategory(cat) {
@@ -149,6 +182,7 @@ function renderRecipeCards(list, container) {
     if (r.wartezeit_min) metaBits.push(`<span class="mono">+${r.wartezeit_min} Min. Ruhe/Gehzeit</span>`);
     if (r.schwierigkeit) metaBits.push(esc(r.schwierigkeit));
     card.innerHTML = `
+      ${r.bild_url ? `<img class="rc-thumb" src="${esc(r.bild_url)}" alt="" loading="lazy">` : ""}
       <div class="rc-main">
         <div class="rc-title">${esc(r.titel)}</div>
         <div class="rc-meta">${metaBits.join(" · ") || "<span>Details in Kürze</span>"}</div>
@@ -218,15 +252,15 @@ async function showDetail(r) {
   let wineHtml = "";
   const wineIds = (r.wein_empfehlung_ids || []).filter(Boolean);
   if (wineIds.length) {
-    await loadWineNames(wineIds);
-    const names = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean)
-      .map((w) => `${w.name}${w.weingut ? " – " + w.weingut : ""}${w.jahr ? " " + w.jahr : ""}`);
+    await ensureWinesLoaded();
+    const names = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean).map(wineLabel);
     if (names.length) {
       wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${names.map((n) => `<div class="wv">${esc(n)}</div>`).join("")}</div></div>`;
     }
   }
 
   detailBody.innerHTML = `
+    ${r.bild_url ? `<img class="detail-image" src="${esc(r.bild_url)}" alt="${esc(r.titel)}">` : ""}
     <span class="rc-cat">${esc(r.kategorie)}</span>
     <h2 style="margin-top:8px">${esc(r.titel)}</h2>
     <div class="detail-meta">${metaBits.join("")}</div>
@@ -247,11 +281,18 @@ function renderDetailActions(r) {
 }
 
 // ---------- form (neu / bearbeiten) ----------
-function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || CAT_ORDER[0], portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "" };
+async function showForm(existing) {
+  const r = existing || { titel: "", kategorie: currentCategory || CAT_ORDER[0], portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [] };
   let bewertung = r.bewertung || 0;
+  let selectedImageFile = null;
+  let imageRemoved = false;
+  const originalBildUrl = r.bild_url || null;
+  let selectedWineIds = [...(r.wein_empfehlung_ids || [])];
 
   detailActions.hidden = true;
+  detailBody.innerHTML = `<div class="loading-state">Lade Formular …</div>`;
+  await ensureWinesLoaded();
+  setView("detail");
   detailBody.innerHTML = `
     <h2 style="margin-top:0">${existing ? "Rezept bearbeiten" : "Neues Rezept"}</h2>
     <div class="form-grid cols-2">
@@ -287,6 +328,20 @@ function showForm(existing) {
         <div id="f-bewertung"></div>
       </div>
       <div class="field span-2">
+        <label>Bild</label>
+        <div class="image-field">
+          ${originalBildUrl
+            ? `<img class="image-preview" id="f-image-preview" src="${esc(originalBildUrl)}" alt="">`
+            : `<div class="image-preview image-preview-empty" id="f-image-preview">Kein Bild</div>`}
+          <div class="image-field-actions">
+            <label class="btn" for="f-image-input">Bild wählen …</label>
+            <input id="f-image-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+            <button type="button" class="btn" id="f-image-remove" ${originalBildUrl ? "" : "hidden"}>Entfernen</button>
+          </div>
+        </div>
+        <p class="field-hint">JPEG, PNG oder WebP, max. 3 MB.</p>
+      </div>
+      <div class="field span-2">
         <label for="f-zutaten">Zutaten (eine pro Zeile)</label>
         <textarea id="f-zutaten" rows="8">${esc(r.zutaten)}</textarea>
       </div>
@@ -302,6 +357,15 @@ function showForm(existing) {
         <label for="f-quelle">Quelle</label>
         <input id="f-quelle" type="text" value="${esc(r.quelle)}">
       </div>
+      <div class="field span-2">
+        <label for="f-wein-search">Weinempfehlung</label>
+        <div class="wine-picker">
+          <div class="wine-chips" id="f-wine-chips"></div>
+          <input id="f-wein-search" type="text" placeholder="Wein suchen, z. B. Name oder Weingut …" autocomplete="off">
+          <div class="wine-suggestions" id="f-wine-suggestions" hidden></div>
+        </div>
+        <p class="field-hint">${ALL_WINES && ALL_WINES.length ? "Aus dem Weinkeller auswählen." : "Keine Weine im Weinkeller gefunden."}</p>
+      </div>
     </div>
     <div class="form-actions">
       <button class="btn" id="f-cancel">Abbrechen</button>
@@ -315,10 +379,81 @@ function showForm(existing) {
   }
   renderStars();
 
+  // ---- Bild-Feld ----
+  const imagePreview = document.getElementById("f-image-preview");
+  const imageInput = document.getElementById("f-image-input");
+  const imageRemoveBtn = document.getElementById("f-image-remove");
+  function setPreview(src) {
+    const el = document.createElement(src ? "img" : "div");
+    el.id = "f-image-preview";
+    if (src) { el.className = "image-preview"; el.src = src; el.alt = ""; }
+    else { el.className = "image-preview image-preview-empty"; el.textContent = "Kein Bild"; }
+    imagePreview.replaceWith(el);
+    return el;
+  }
+  let previewEl = imagePreview;
+  imageInput.addEventListener("change", () => {
+    const file = imageInput.files && imageInput.files[0];
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) { showToast("Nur JPEG, PNG oder WebP erlaubt.", true); imageInput.value = ""; return; }
+    if (file.size > MAX_IMAGE_BYTES) { showToast("Bild ist grösser als 3 MB.", true); imageInput.value = ""; return; }
+    selectedImageFile = file;
+    imageRemoved = false;
+    previewEl = setPreview(URL.createObjectURL(file));
+    imageRemoveBtn.hidden = false;
+  });
+  imageRemoveBtn.addEventListener("click", () => {
+    selectedImageFile = null;
+    imageRemoved = true;
+    imageInput.value = "";
+    previewEl = setPreview(null);
+    imageRemoveBtn.hidden = true;
+  });
+
+  // ---- Weinempfehlung-Auswahl ----
+  const wineChipsEl = document.getElementById("f-wine-chips");
+  const wineSearchEl = document.getElementById("f-wein-search");
+  const wineSuggestionsEl = document.getElementById("f-wine-suggestions");
+  function renderWineChips() {
+    wineChipsEl.innerHTML = selectedWineIds.map((id) => {
+      const w = WINES_BY_ID[id];
+      const label = w ? wineLabel(w) : id;
+      return `<span class="chip" data-id="${esc(id)}">${esc(label)}<button type="button" class="chip-remove" data-id="${esc(id)}" aria-label="Entfernen">×</button></span>`;
+    }).join("");
+    wineChipsEl.querySelectorAll(".chip-remove").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedWineIds = selectedWineIds.filter((id) => id !== btn.dataset.id);
+        renderWineChips();
+      });
+    });
+  }
+  renderWineChips();
+  function renderWineSuggestions(query) {
+    const ql = query.trim().toLowerCase();
+    const pool = (ALL_WINES || []).filter((w) => !selectedWineIds.includes(w.id));
+    const matches = ql
+      ? pool.filter((w) => wineLabel(w).toLowerCase().includes(ql)).slice(0, 8)
+      : [];
+    if (!matches.length) { wineSuggestionsEl.hidden = true; wineSuggestionsEl.innerHTML = ""; return; }
+    wineSuggestionsEl.innerHTML = matches.map((w) => `<button type="button" class="wine-suggestion" data-id="${esc(w.id)}">${esc(wineLabel(w))}</button>`).join("");
+    wineSuggestionsEl.hidden = false;
+    wineSuggestionsEl.querySelectorAll(".wine-suggestion").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedWineIds.push(btn.dataset.id);
+        wineSearchEl.value = "";
+        wineSuggestionsEl.hidden = true;
+        renderWineChips();
+      });
+    });
+  }
+  wineSearchEl.addEventListener("input", () => renderWineSuggestions(wineSearchEl.value));
+  wineSearchEl.addEventListener("blur", () => setTimeout(() => { wineSuggestionsEl.hidden = true; }, 150));
+
   document.getElementById("f-cancel").addEventListener("click", () => {
     if (existing) showDetail(existing); else backFromDetail();
   });
   document.getElementById("f-save").addEventListener("click", async () => {
+    const saveBtn = document.getElementById("f-save");
     const payload = {
       titel: document.getElementById("f-titel").value.trim(),
       kategorie: document.getElementById("f-kategorie").value,
@@ -331,11 +466,30 @@ function showForm(existing) {
       zubereitung: document.getElementById("f-zubereitung").value,
       notizen: document.getElementById("f-notizen").value || null,
       quelle: document.getElementById("f-quelle").value || null,
+      wein_empfehlung_ids: selectedWineIds.length ? selectedWineIds : null,
     };
     if (!payload.titel) { showToast("Bitte einen Titel angeben.", true); return; }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Speichern …";
+    try {
+      if (selectedImageFile) {
+        payload.bild_url = await uploadRecipeImage(selectedImageFile);
+        if (originalBildUrl) await deleteRecipeImage(originalBildUrl);
+      } else if (imageRemoved) {
+        payload.bild_url = null;
+        if (originalBildUrl) await deleteRecipeImage(originalBildUrl);
+      } else {
+        payload.bild_url = originalBildUrl;
+      }
+    } catch (e) {
+      showToast("Bild-Upload fehlgeschlagen: " + e.message, true);
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Speichern";
+      return;
+    }
     await saveRecipe(payload, existing ? existing.id : null);
   });
-  setView("detail");
 }
 
 function numOrNull(v) {

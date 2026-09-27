@@ -10,8 +10,14 @@ also direkt über GitHub Pages oder jeden anderen statischen Hoster ausliefern.
 - Startseite mit Kategorie-Kacheln (Anzahl Rezepte pro Kategorie)
 - Volltextsuche über Titel, Zutaten und Zubereitung
 - Detailansicht mit Zutaten, Zubereitung, Notizen, Quelle
-- Weinempfehlung-Box, falls ein Rezept mit `wein_empfehlung_ids` auf die
-  `wines`-Tabelle verweist
+- Weinempfehlung-Box in der Detailansicht, falls ein Rezept mit
+  `wein_empfehlung_ids` auf die `wines`-Tabelle verweist; im Formular per
+  Such-Auswahl (Autocomplete + entfernbare Chips) aus dem Weinkeller wählbar
+  — erfordert Login, da die `wines`-Tabelle nur für angemeldete Nutzer lesbar
+  ist (gleiche Privatsphäre-Regel wie in der Weinkeller-App)
+- Bildupload pro Rezept (JPEG/PNG/WebP, max. 3 MB) über Supabase Storage
+  (Bucket `rezeptbilder`), mit Vorschau, Ersetzen und Entfernen im Formular;
+  Bild erscheint in der Detailansicht und als Thumbnail in der Listenkarte
 - Bearbeiten- und Löschen-Icons in der Detailansicht, „Neues Rezept“-Button
   in der Listenansicht
 - Login (Supabase Auth) für Bearbeiten/Löschen/Neuanlegen — Lesen ist ohne
@@ -80,10 +86,14 @@ Tabelle `rezepte` (Auszug):
 | `notizen`, `quelle` | text | optional |
 | `wein_empfehlung_ids` | text[] | Referenzen auf `wines.id` (kein FK) |
 
+## Bilder (Supabase Storage)
+
+Bucket `rezeptbilder` (öffentlich lesbar, Schreiben nur für angemeldete
+Nutzer ausser Rolle `viewer` — analog zu `weinbilder` bei der
+Weinkeller-App). Beim Speichern eines Rezepts wird ein neues Bild
+hochgeladen und ein zuvor gesetztes Bild automatisch aus dem Storage
+entfernt, wenn es ersetzt oder gelöscht wird.
+
 ## Offene Punkte / mögliche nächste Schritte
 
-- Bilder pro Rezept (`bild_url`) werden in der Datenbank bereits
-  unterstützt, aber im Formular noch nicht zum Hochladen angeboten.
-- Die Weinempfehlung lässt sich aktuell nur über die Datenbank pflegen
-  (`wein_empfehlung_ids`), nicht über ein Auswahlfeld im Formular.
 - Vollimport der restlichen OneNote-Rezepte (siehe Projekt-Dokumentation).

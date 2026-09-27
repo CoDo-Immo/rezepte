@@ -170,6 +170,42 @@ ul.zutaten li{ border-bottom:1px dashed var(--line); padding-bottom:7px; font-si
 .placeholder-box{ border:1px dashed var(--line); border-radius:12px; padding:16px; color:var(--muted); font-size:.88rem; text-align:center; }
 .source-link{ font-size:.82rem; color:var(--accent); word-break:break-word; }
 
+/* recipe card thumbnail */
+.rc-thumb{ width:48px; height:48px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-2); }
+
+/* detail image */
+.detail-image{ width:100%; max-height:320px; object-fit:cover; border-radius:14px; margin-bottom:16px; display:block; }
+
+/* image upload field */
+.image-field{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.image-preview{ width:88px; height:88px; border-radius:12px; object-fit:cover; border:1px solid var(--line); flex-shrink:0; }
+.image-preview-empty{ display:flex; align-items:center; justify-content:center; text-align:center; color:var(--muted); font-size:.75rem; background:var(--bg); padding:6px; }
+.image-field-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.image-field-actions label.btn{ margin:0; }
+
+/* wine picker (Weinempfehlung) */
+.wine-picker{ position:relative; }
+.wine-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.wine-chips:empty{ display:none; }
+.chip{
+  display:inline-flex; align-items:center; gap:6px; background:var(--accent-2-tint); color:var(--accent-2);
+  border:1px solid var(--accent-2); border-radius:99px; padding:4px 6px 4px 12px; font-size:.82rem;
+}
+.chip-remove{
+  background:none; border:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; padding:2px 4px;
+  border-radius:99px; display:inline-flex; align-items:center; justify-content:center;
+}
+.chip-remove:hover{ background:rgba(0,0,0,.08); }
+.wine-suggestions{
+  position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--surface); border:1px solid var(--line);
+  border-radius:12px; box-shadow:var(--shadow); z-index:10; max-height:220px; overflow-y:auto; padding:6px;
+}
+.wine-suggestion{
+  display:block; width:100%; text-align:left; background:none; border:none; color:var(--ink); font:inherit;
+  font-size:.88rem; padding:8px 10px; border-radius:8px; cursor:pointer;
+}
+.wine-suggestion:hover{ background:var(--surface-2); }
+
 /* form (edit / new) */
 .form-grid{ display:grid; grid-template-columns:1fr; gap:14px; }
 @media(min-width:560px){ .form-grid.cols-2{ grid-template-columns:1fr 1fr; } }
