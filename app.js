@@ -609,15 +609,18 @@ authBtn.addEventListener("click", async () => {
 onAuthChange(updateAuthUi);
 
 // ---------- global events ----------
-document.getElementById("home-btn").addEventListener("click", () => { search.value = ""; currentSearchTerm = ""; currentCategory = null; setView("home"); });
-document.getElementById("home-btn").addEventListener("keypress", (e) => { if (e.key === "Enter") { search.value = ""; currentSearchTerm = ""; currentCategory = null; setView("home"); } });
-document.getElementById("list-back").addEventListener("click", () => {
+function goHome() {
   search.value = "";
   currentSearchTerm = "";
   currentCategory = null;
   setView("home");
-});
+}
+document.getElementById("home-btn").addEventListener("click", goHome);
+document.getElementById("home-btn").addEventListener("keypress", (e) => { if (e.key === "Enter") goHome(); });
+document.getElementById("list-back").addEventListener("click", goHome);
+document.getElementById("list-home").addEventListener("click", goHome);
 document.getElementById("detail-back").addEventListener("click", backFromDetail);
+document.getElementById("detail-home").addEventListener("click", goHome);
 document.getElementById("add-btn").addEventListener("click", () => requireEdit(() => showForm(null)));
 modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
 
