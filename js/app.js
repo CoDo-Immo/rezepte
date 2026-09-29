@@ -42,12 +42,22 @@ const recipeList = document.getElementById("recipe-list");
 const detailBody = document.getElementById("detail-body");
 const detailActions = document.getElementById("detail-actions");
 const search = document.getElementById("search");
-const totalCountEl = document.getElementById("total-count");
 const authBtn = document.getElementById("auth-btn");
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modalBox = document.getElementById("modal-box");
 const toastEl = document.getElementById("toast");
 const footerEl = document.getElementById("app-footer");
+const filterToggle = document.getElementById("filter-toggle");
+const filterPanel = document.getElementById("filter-panel");
+const filterBadge = document.getElementById("filter-badge");
+const filterResult = document.getElementById("filter-result");
+const FL = {
+  bewertung: document.getElementById("fl-bewertung"),
+  portMin: document.getElementById("fl-port-min"), portMax: document.getElementById("fl-port-max"),
+  zeitMin: document.getElementById("fl-zeit-min"), zeitMax: document.getElementById("fl-zeit-max"),
+  waitMin: document.getElementById("fl-wait-min"), waitMax: document.getElementById("fl-wait-max"),
+  wein: document.getElementById("fl-wein"), weinText: document.getElementById("fl-wein-text"),
+};
 
 function setView(v) {
   viewHome.hidden = v !== "home";
@@ -149,7 +159,6 @@ function totalCountForCategory(cat) {
 // ---------- home / category grid ----------
 function renderCategoryGrid() {
   catGrid.innerHTML = "";
-  totalCountEl.textContent = `${RECIPES.length} Rezepte`;
   if (!CATEGORIES.length) {
     catGrid.innerHTML = `<div class="empty-state">Keine Kategorien vorhanden.</div>`;
     return;
@@ -227,17 +236,71 @@ function showList(cat) {
   setView("list");
 }
 
-function showSearch(q) {
+// ---------- Filter ----------
+function inRange(val, minEl, maxEl) {
+  const min = numOrNull(minEl.value), max = numOrNull(maxEl.value);
+  if (min === null && max === null) return true;
+  if (val === null || val === undefined) return false;
+  return (min === null || val >= min) && (max === null || val <= max);
+}
+function activeFilterCount() {
+  let n = 0;
+  if (Number(FL.bewertung.value) > 0) n++;
+  if (FL.portMin.value !== "" || FL.portMax.value !== "") n++;
+  if (FL.zeitMin.value !== "" || FL.zeitMax.value !== "") n++;
+  if (FL.waitMin.value !== "" || FL.waitMax.value !== "") n++;
+  if (FL.wein.value || FL.weinText.value.trim()) n++;
+  return n;
+}
+function filtersActive() { return activeFilterCount() > 0; }
+function matchesFilters(r) {
+  const minStars = Number(FL.bewertung.value);
+  if (minStars > 0 && (r.bewertung || 0) < minStars) return false;
+  if (!inRange(r.portionen, FL.portMin, FL.portMax)) return false;
+  if (!inRange(r.zubereitungszeit_min, FL.zeitMin, FL.zeitMax)) return false;
+  if (!inRange(r.wartezeit_min, FL.waitMin, FL.waitMax)) return false;
+  const ids = (r.wein_empfehlung_ids || []).filter(Boolean);
+  if (FL.wein.value === "with" && !ids.length) return false;
+  if (FL.wein.value === "without" && ids.length) return false;
+  const wt = FL.weinText.value.trim().toLowerCase();
+  if (wt) {
+    if (!ids.some((id) => WINES_BY_ID[id] && wineLabel(WINES_BY_ID[id]).toLowerCase().includes(wt))) return false;
+  }
+  return true;
+}
+function updateFilterUi(shown) {
+  const n = activeFilterCount();
+  filterBadge.hidden = n === 0;
+  filterBadge.textContent = n;
+  filterToggle.classList.toggle("active", n > 0 || !filterPanel.hidden);
+  filterResult.textContent = `${shown} von ${RECIPES.length} Rezepten`;
+}
+function resetFilters() {
+  FL.bewertung.value = "0"; FL.wein.value = ""; FL.weinText.value = "";
+  [FL.portMin, FL.portMax, FL.zeitMin, FL.zeitMax, FL.waitMin, FL.waitMax].forEach((el) => { el.value = ""; });
+}
+async function applyHomeState() {
+  const q = search.value.trim();
+  if (!q && !filtersActive()) { currentSearchTerm = ""; updateFilterUi(RECIPES.length); setView("home"); return; }
+  await showResults(q);
+}
+
+// ---------- Trefferliste (Suche und/oder Filter) ----------
+async function showResults(q) {
   currentCategory = null;
-  currentSearchTerm = q;
-  listTitle.textContent = `Suche: „${q}“`;
-  const ql = q.toLowerCase();
+  currentSearchTerm = q || "";
+  if (FL.wein.value === "with" || FL.weinText.value.trim()) await ensureWinesLoaded();
+  const ql = (q || "").toLowerCase();
   const list = RECIPES.filter((r) =>
-    (r.titel || "").toLowerCase().includes(ql) ||
-    (r.zutaten || "").toLowerCase().includes(ql) ||
-    (r.zubereitung || "").toLowerCase().includes(ql)
+    (!ql ||
+      (r.titel || "").toLowerCase().includes(ql) ||
+      (r.zutaten || "").toLowerCase().includes(ql) ||
+      (r.zubereitung || "").toLowerCase().includes(ql)) &&
+    matchesFilters(r)
   );
+  listTitle.textContent = q ? `Suche: „${q}“` : "Gefilterte Rezepte";
   listCount.textContent = `${list.length} Treffer`;
+  updateFilterUi(list.length);
   renderRecipeCards(list, recipeList);
   setView("list");
 }
@@ -559,7 +622,7 @@ function confirmDelete(r) {
 }
 
 function backFromDetail() {
-  if (currentSearchTerm) showSearch(currentSearchTerm);
+  if (currentSearchTerm || (!currentCategory && filtersActive())) showResults(currentSearchTerm);
   else if (currentCategory) showList(currentCategory);
   else setView("home");
 }
@@ -616,6 +679,10 @@ loginSubmit.addEventListener("click", doLogin);
 
 authBtn.addEventListener("click", async () => {
   await signOut();
+  resetFilters();
+  filterPanel.hidden = true;
+  filterToggle.setAttribute("aria-expanded", "false");
+  updateFilterUi(0);
   search.value = "";
   currentSearchTerm = "";
   currentCategory = null;
@@ -626,6 +693,8 @@ onAuthChange(updateAuthUi);
 
 // ---------- global events ----------
 function goHome() {
+  resetFilters();
+  updateFilterUi(RECIPES.length);
   search.value = "";
   currentSearchTerm = "";
   currentCategory = null;
@@ -643,11 +712,25 @@ modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop)
 let searchTimer;
 search.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  const q = search.value.trim();
   searchTimer = setTimeout(() => {
-    if (q.length === 0) { setView("home"); return; }
-    showSearch(q);
+    applyHomeState();
   }, 120);
+});
+
+filterToggle.addEventListener("click", () => {
+  filterPanel.hidden = !filterPanel.hidden;
+  filterToggle.setAttribute("aria-expanded", String(!filterPanel.hidden));
+  updateFilterUi(RECIPES.length);
+});
+Object.values(FL).forEach((el) => {
+  el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyHomeState, 150);
+  });
+});
+document.getElementById("filter-reset").addEventListener("click", () => {
+  resetFilters();
+  applyHomeState();
 });
 
 // ---------- init ----------
