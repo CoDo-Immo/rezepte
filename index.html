@@ -53,14 +53,59 @@
       </div>
     </div>
     <div class="topbar-actions">
-      <span class="recipe-count" id="total-count"></span>
       <button class="auth-btn" id="auth-btn">Abmelden</button>
     </div>
   </div>
 
-  <div class="search-wrap">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-    <input id="search" type="text" placeholder="Titel oder Zutat suchen, z. B. „Baumnüsse“ oder „Honig“ …" autocomplete="off">
+  <div class="search-row">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="Titel oder Zutat suchen, z. B. „Baumnüsse“ oder „Honig“ …" autocomplete="off">
+    </div>
+    <button class="filter-toggle" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16l-6 8v6l-4-2v-4Z"/></svg>
+      <span>Filter</span><span class="filter-badge" id="filter-badge" hidden></span>
+    </button>
+  </div>
+
+  <div class="filter-panel" id="filter-panel" hidden>
+    <div class="filter-grid">
+      <div class="field">
+        <label for="fl-bewertung">Bewertung</label>
+        <select id="fl-bewertung">
+          <option value="0">Egal</option>
+          <option value="1">mind. 1 Stern</option>
+          <option value="2">mind. 2 Sterne</option>
+          <option value="3">mind. 3 Sterne</option>
+          <option value="4">4 Sterne</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Portionen</label>
+        <div class="range"><input id="fl-port-min" type="number" min="0" placeholder="von"><span>–</span><input id="fl-port-max" type="number" min="0" placeholder="bis"></div>
+      </div>
+      <div class="field">
+        <label>Zubereitungszeit (Min.)</label>
+        <div class="range"><input id="fl-zeit-min" type="number" min="0" placeholder="von"><span>–</span><input id="fl-zeit-max" type="number" min="0" placeholder="bis"></div>
+      </div>
+      <div class="field">
+        <label>Warte-/Ruhezeit (Min.)</label>
+        <div class="range"><input id="fl-wait-min" type="number" min="0" placeholder="von"><span>–</span><input id="fl-wait-max" type="number" min="0" placeholder="bis"></div>
+      </div>
+      <div class="field wide">
+        <label for="fl-wein-text">Weinempfehlung</label>
+        <input id="fl-wein-text" type="text" placeholder="Wein suchen, z. B. Name oder Weingut …" autocomplete="off">
+        <select id="fl-wein" style="margin-top:6px">
+          <option value="">Alle</option>
+          <option value="with">Mit Weinempfehlung</option>
+          <option value="without">Ohne Weinempfehlung</option>
+        </select>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <span class="filter-result" id="filter-result"></span>
+      <button class="btn" id="filter-reset" type="button">Filter zurücksetzen</button>
+    </div>
   </div>
 
   <div id="view-home">
