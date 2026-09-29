@@ -1,21 +1,10 @@
 import { supabase } from "./supabaseClient.js";
+import { APP_VERSION } from "./config.js";
 import { initAuth, onAuthChange, getSession, canEdit, signIn, signOut } from "./auth.js";
 
-// ---------- category metadata (Icons wie im Prototyp) ----------
-const ICONS = {
-  "Hauptgerichte": '<path d="M4 13a8 8 0 0 1 16 0"/><path d="M4 13h16"/><path d="M12 3v3"/><path d="M8.5 3.6 9.3 6"/><path d="M15.5 3.6 14.7 6"/>',
-  "Suppen": '<path d="M4 12h16l-1.2 5a3 3 0 0 1-3 2.4H8.2a3 3 0 0 1-3-2.4Z"/><path d="M9 9c-1-1-1-2 0-3M12 9c-1-1.4-1-2.6 0-4M15 9c-1-1-1-2 0-3"/>',
-  "Salat": '<path d="M3 13a9 9 0 0 1 18 0Z"/><path d="M3 13h18"/><path d="M12 13c0-3 1.6-6 4-7"/><path d="M12 13c0-2.6-1.2-5-3-6.4"/>',
-  "Gemüse": '<path d="M12 21c4-.3 7-3.3 7-8 0-3-1.6-5.4-3.6-6.8.4 1 .3 2-.4 2.7-1-1.6-2.6-2.6-4.5-2.9.6 1 .4 2.2-.5 2.8C7.8 9.6 6 12 6 14.4 6 18.4 8.6 20.8 12 21Z"/>',
-  "Fisch": '<path d="M3 12c3-4 8-6 12-4 2 1 4 2.5 6 4-2 1.5-4 3-6 4-4 2-9 0-12-4Z"/><path d="M15 9.5 17 7M15 14.5 17 17"/><circle cx="7.3" cy="11.3" r=".6" fill="currentColor" stroke="none"/>',
-  "Sauce": '<path d="M8 3h5l1 5H7Z"/><path d="M7 8h7l1.4 8.6A3 3 0 0 1 12.4 20h-.8a3 3 0 0 1-3-3.4Z"/>',
-  "Brot und Teig": '<path d="M4 14c0-5 3.5-8 8-8s8 3 8 8c0 3-2.5 5-8 5s-8-2-8-5Z"/><path d="M9 10.2c.6-1 1.8-1.6 3-1.6s2.4.6 3 1.6"/>',
-  "Mandeln & Nüsse": '<path d="M12 3c3 0 5 3 5 7 0 6-2.5 11-5 11s-5-5-5-11c0-4 2-7 5-7Z"/><path d="M9 9.5c1.6.9 4.4.9 6 0"/>',
-  "Gewürze": '<path d="M12 21c-3-3-6-6.5-6-10a6 6 0 0 1 12 0c0 3.5-3 7-6 10Z"/><path d="M12 6v6"/>',
-  "Dessert": '<path d="M5 11 12 4l7 7Z"/><path d="M5 11h14v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3Z"/><path d="M12 4v0"/>'
-};
+// ---------- Kategorien kommen dynamisch aus der Supabase-Tabelle `kategorien` ----------
+const DEFAULT_ICON = '<path d="M5 4h14v16H5Z"/><path d="M9 9h6M9 13h6"/>';
 const WINE_ICON = '<path d="M8 3h8l-1 7a3 3 0 0 1-6 0Z"/><path d="M12 12v6M9 20h6"/>';
-const CAT_ORDER = ["Hauptgerichte","Suppen","Salat","Gemüse","Fisch","Sauce","Brot und Teig","Mandeln & Nüsse","Gewürze","Dessert"];
 const SCHWIERIGKEIT_OPTIONS = ["einfach", "mittel", "anspruchsvoll"];
 
 function svg(paths, cls) {
@@ -27,6 +16,7 @@ function esc(str) {
 
 // ---------- state ----------
 let RECIPES = [];
+let CATEGORIES = []; // aktive Kategorien aus Tabelle `kategorien`, sortiert
 let WINES_BY_ID = {};
 let ALL_WINES = null;
 let currentCategory = null;
@@ -57,6 +47,7 @@ const authBtn = document.getElementById("auth-btn");
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modalBox = document.getElementById("modal-box");
 const toastEl = document.getElementById("toast");
+const footerEl = document.getElementById("app-footer");
 
 function setView(v) {
   viewHome.hidden = v !== "home";
@@ -90,7 +81,28 @@ async function loadRecipes() {
     return;
   }
   RECIPES = data || [];
+  await loadCategories();
   renderCategoryGrid();
+  renderFooter();
+}
+
+async function loadCategories() {
+  const { data, error } = await supabase
+    .from("kategorien")
+    .select("id, name, icon, sortierung, aktiv")
+    .eq("aktiv", true)
+    .order("sortierung", { ascending: true })
+    .order("name", { ascending: true });
+  if (error) {
+    showToast("Fehler beim Laden der Kategorien: " + error.message, true);
+    CATEGORIES = [];
+    return;
+  }
+  CATEGORIES = data || [];
+}
+
+function renderFooter() {
+  footerEl.textContent = `${RECIPES.length} Rezepte · Version ${APP_VERSION}`;
 }
 
 // Lädt einmalig alle Weine (für Anzeige + Such-Auswahl in der Weinempfehlung).
@@ -138,11 +150,15 @@ function totalCountForCategory(cat) {
 function renderCategoryGrid() {
   catGrid.innerHTML = "";
   totalCountEl.textContent = `${RECIPES.length} Rezepte`;
-  CAT_ORDER.forEach((cat) => {
+  if (!CATEGORIES.length) {
+    catGrid.innerHTML = `<div class="empty-state">Keine Kategorien vorhanden.</div>`;
+    return;
+  }
+  CATEGORIES.forEach(({ name: cat, icon }) => {
     const n = totalCountForCategory(cat);
     const btn = document.createElement("button");
     btn.className = "cat-tile";
-    btn.innerHTML = `${svg(ICONS[cat] || "")}<span class="name">${esc(cat)}</span><span class="count">${n} Rezept${n === 1 ? "" : "e"}</span>`;
+    btn.innerHTML = `${svg(icon || DEFAULT_ICON)}<span class="name">${esc(cat)}</span><span class="count">${n} Rezept${n === 1 ? "" : "e"}</span>`;
     btn.addEventListener("click", () => showList(cat));
     catGrid.appendChild(btn);
   });
@@ -288,7 +304,7 @@ function renderDetailActions(r) {
 
 // ---------- form (neu / bearbeiten) ----------
 async function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || CAT_ORDER[0], portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [] };
+  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [] };
   let bewertung = r.bewertung || 0;
   let selectedImageFile = null;
   let imageRemoved = false;
@@ -308,7 +324,7 @@ async function showForm(existing) {
       </div>
       <div class="field">
         <label for="f-kategorie">Kategorie</label>
-        <select id="f-kategorie">${CAT_ORDER.map((c) => `<option value="${esc(c)}" ${c === r.kategorie ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+        <select id="f-kategorie">${(CATEGORIES.some((c) => c.name === r.kategorie) || !r.kategorie ? CATEGORIES.map((c) => c.name) : [r.kategorie, ...CATEGORIES.map((c) => c.name)]).map((c) => `<option value="${esc(c)}" ${c === r.kategorie ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
       </div>
       <div class="field">
         <label for="f-schwierigkeit">Schwierigkeit</label>
