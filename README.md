@@ -82,7 +82,7 @@ Tabelle `rezepte` (Auszug):
 | Feld | Typ | Bemerkung |
 |---|---|---|
 | `titel` | text | |
-| `kategorie` | text | 10 feste Werte (Check-Constraint) |
+| `kategorie` | text | Fremdschlüssel auf `kategorien.name` (dynamisch erweiterbar) |
 | `portionen`, `zubereitungszeit_min`, `wartezeit_min` | integer | optional |
 | `schwierigkeit` | text | `einfach` / `mittel` / `anspruchsvoll` |
 | `bewertung` | integer | 1–4 Sterne |
@@ -90,6 +90,19 @@ Tabelle `rezepte` (Auszug):
 | `zubereitung` | text | freier Text, ein Absatz/Schritt pro Zeile |
 | `notizen`, `quelle` | text | optional |
 | `wein_empfehlung_ids` | text[] | Referenzen auf `wines.id` (kein FK) |
+
+## Kategorien (dynamisch)
+
+Tabelle `kategorien` (`name`, `icon` = SVG-Pfade 24×24, `sortierung`, `aktiv`).
+Die Kacheln der Startseite und das Kategorie-Dropdown im Formular werden bei
+jedem Laden daraus aufgebaut. Neue Kategorie = neue Zeile in der Tabelle
+(Supabase Table Editor); leeres `icon` ergibt ein Standard-Icon, `aktiv = false`
+blendet sie aus. Umbenennen wirkt per `ON UPDATE CASCADE` auf alle Rezepte;
+Löschen ist nur ohne zugeordnete Rezepte möglich.
+
+## Fusszeile
+
+Zeigt Anzahl Rezepte und App-Version (`APP_VERSION` in `js/config.js`).
 
 ## Bilder (Supabase Storage)
 
