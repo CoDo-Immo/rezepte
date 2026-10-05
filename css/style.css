@@ -145,7 +145,11 @@ img{ max-width:100%; }
 .icon-btn svg{ width:16px; height:16px; }
 .icon-btn:hover{ border-color:var(--accent); color:var(--accent); }
 .icon-btn-danger:hover{ border-color:var(--danger); color:var(--danger); }
-.detail-actions{ display:flex; gap:8px; margin-left:auto; }
+.detail-actions{ display:flex; gap:8px; }
+#share-btn{ margin-left:auto; }
+#share-btn[aria-busy="true"]{ opacity:.55; cursor:progress; }
+.share-options{ display:flex; flex-direction:column; gap:10px; margin-top:4px; }
+.share-options .btn{ width:100%; text-align:center; text-decoration:none; display:block; }
 .add-btn{ margin-left:auto; }
 
 /* recipe list */
