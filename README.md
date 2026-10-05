@@ -20,6 +20,13 @@ also direkt über GitHub Pages oder jeden anderen statischen Hoster ausliefern.
   Bild erscheint in der Detailansicht und als Thumbnail in der Listenkarte
 - Bearbeiten- und Löschen-Icons in der Detailansicht, „Neues Rezept“-Button
   in der Listenansicht — beide nur sichtbar mit Schreibrechten
+- Rezept als PDF teilen: Teilen-Icon in der Detailansicht (für alle Rollen,
+  auch `viewer`). Erzeugt ein A4-PDF (Bild, Zutaten, Zubereitung,
+  Weinempfehlung, Notizen, Quelle) direkt im Browser mit jsPDF (wird erst bei
+  Bedarf von cdnjs nachgeladen) und öffnet über die Web-Share-API das
+  Teilen-Menü des Geräts (Outlook, Mail, WhatsApp usw. mit angehängtem PDF).
+  Wo der Browser kein Teilen von Dateien unterstützt, erscheint ein Dialog
+  mit „PDF herunterladen“ und „E-Mail-Entwurf öffnen“.
 - Login-Pflicht für die ganze App (Supabase Auth), exakt wie bei der
   Weinkeller-App: ohne Anmeldung ist nichts sichtbar, auch kein Lesen. Ein
   Konto mit Rolle `viewer` darf nur lesen, alle anderen angemeldeten Konten
@@ -111,6 +118,27 @@ Nutzer ausser Rolle `viewer` — analog zu `weinbilder` bei der
 Weinkeller-App). Beim Speichern eines Rezepts wird ein neues Bild
 hochgeladen und ein zuvor gesetztes Bild automatisch aus dem Storage
 entfernt, wenn es ersetzt oder gelöscht wird.
+
+## Backup & Restore
+
+Die Daten dieser App (Tabellen `rezepte` und `kategorien`, Bucket `rezeptbilder`) werden zusammen mit allen
+anderen Tabellen des Projekts **Gourmet-Adlemsried** über ein gemeinsames Voll-Backup gesichert. Es liegt im
+Projekt «Weinkeller APP», nicht in diesem Repo:
+
+- Ordner: [`Weinkeller APP/outputs/backup`](file:///C:/Users/gianc/OneDrive/Documente/LLM_Projekte/projekte/Weinkeller%20APP/outputs/backup)
+  (`C:\Users\gianc\OneDrive\Documente\LLM_Projekte\projekte\Weinkeller APP\outputs\backup`)
+- **Backup:** `Backup-starten.bat` doppelklicken, Ergebnis in `backups/JJJJ-MM/`. Empfohlen: einmal im Monat.
+  Es prüft jede Tabelle gegen die Datenbank und meldet «BACKUP UNVOLLSTÄNDIG», wenn etwas fehlt.
+- **Restore:** `Restore-starten.bat` doppelklicken (erst Vorschau, dann Bestätigung mit `JA`). Er löscht nichts
+  und schreibt in einer Transaktion. Dafür braucht die `.env` im Backup-Ordner einmalig `SUPABASE_DB_URL`,
+  weil `rezepte` und `kategorien` eine automatisch vergebene ID haben. Bei Rezepten werden zuerst die
+  Kategorien zurückgespielt, dann die Rezepte (Fremdschlüssel).
+- Nicht gesichert: Datenbankschema (Tabellen, Policies) und Benutzerkonten.
+- Neue Tabellen im SQL-Editor anlegen? Danach `grant all on table public.<tabelle> to service_role;`
+  ausführen, sonst kann das Backup sie nicht lesen. (Der `anon`-Key in `js/config.js` ist davon nicht betroffen.)
+
+Projektordner: [Weinkeller APP](file:///C:/Users/gianc/OneDrive/Documente/LLM_Projekte/projekte/Weinkeller%20APP) · [Rezepte](file:///C:/Users/gianc/OneDrive/Documente/LLM_Projekte/projekte/Rezepte) ·
+[Warenvorrat Adlemsried](file:///C:/Users/gianc/OneDrive/Documente/LLM_Projekte/projekte/Warenvorrat%20Adlemsried)
 
 ## Offene Punkte / mögliche nächste Schritte
 
