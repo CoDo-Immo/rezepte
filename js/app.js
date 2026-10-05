@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient.js";
 import { APP_VERSION } from "./config.js";
 import { initAuth, onAuthChange, getSession, canEdit, signIn, signOut } from "./auth.js";
+import { buildRecipePdf, loadImageForPdf } from "./pdf.js";
 
 // ---------- Kategorien kommen dynamisch aus der Supabase-Tabelle `kategorien` ----------
 const DEFAULT_ICON = '<path d="M5 4h14v16H5Z"/><path d="M9 9h6M9 13h6"/>';
@@ -41,6 +42,7 @@ const listCount = document.getElementById("list-count");
 const recipeList = document.getElementById("recipe-list");
 const detailBody = document.getElementById("detail-body");
 const detailActions = document.getElementById("detail-actions");
+const shareBtn = document.getElementById("share-btn");
 const search = document.getElementById("search");
 const authBtn = document.getElementById("auth-btn");
 const modalBackdrop = document.getElementById("modal-backdrop");
@@ -357,10 +359,112 @@ async function showDetail(r) {
   detailBody.dataset.recipeId = r.id;
   renderDetailActions(r);
   setView("detail");
+  // PDF im Hintergrund vorbereiten, damit das Teilen beim Klick sofort startet
+  getRecipePdf(r).catch(() => {});
+}
+
+// ---------- PDF teilen ----------
+// Das PDF wird pro Rezept (und Inhaltsstand) einmal erzeugt und zwischengespeichert.
+// Wichtig für iOS/Safari: navigator.share() muss direkt auf den Klick folgen —
+// deshalb wird das PDF schon beim Öffnen der Detailansicht vorbereitet.
+const PDF_CACHE = new Map(); // recipe.id -> { sig, promise }
+
+async function wineLabelsFor(r) {
+  const ids = (r.wein_empfehlung_ids || []).filter(Boolean);
+  if (!ids.length) return [];
+  await ensureWinesLoaded();
+  return ids.map((id) => WINES_BY_ID[id]).filter(Boolean).map(wineLabel);
+}
+
+function getRecipePdf(r) {
+  const sig = JSON.stringify(r);
+  const hit = PDF_CACHE.get(r.id);
+  if (hit && hit.sig === sig) return hit.promise;
+  const promise = (async () => {
+    const [wines, image] = await Promise.all([
+      wineLabelsFor(r),
+      r.bild_url ? loadImageForPdf(r.bild_url).catch(() => null) : Promise.resolve(null),
+    ]);
+    const { blob, filename } = await buildRecipePdf(r, { wines, image });
+    return { blob, filename, file: new File([blob], filename, { type: "application/pdf" }) };
+  })();
+  PDF_CACHE.set(r.id, { sig, promise });
+  promise.catch(() => { if (PDF_CACHE.get(r.id)?.promise === promise) PDF_CACHE.delete(r.id); });
+  return promise;
+}
+
+function canShareFile(file) {
+  try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); }
+  catch (_e) { return false; }
+}
+
+function downloadPdf(pdf) {
+  const url = URL.createObjectURL(pdf.blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = pdf.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function shareRecipe(r) {
+  if (shareBtn.getAttribute("aria-busy") === "true") return;
+  shareBtn.setAttribute("aria-busy", "true");
+  let pdf;
+  try {
+    pdf = await getRecipePdf(r);
+  } catch (e) {
+    showToast("PDF konnte nicht erstellt werden: " + e.message, true);
+    return;
+  } finally {
+    shareBtn.removeAttribute("aria-busy");
+  }
+  if (canShareFile(pdf.file)) {
+    try {
+      await navigator.share({ files: [pdf.file], title: r.titel, text: r.titel });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // Nutzer hat das Teilen-Menü geschlossen
+      // sonst (z. B. NotAllowedError): Auswahl-Dialog als Rückfallebene
+    }
+  }
+  showShareDialog(r, pdf);
+}
+
+function showShareDialog(r, pdf) {
+  const canShare = canShareFile(pdf.file);
+  const subject = `Rezept: ${r.titel}`;
+  const body = `Hallo\n\nHier ist das Rezept „${r.titel}“ als PDF.\n`;
+  const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  modalBox.innerHTML = `
+    <h3>Rezept als PDF teilen</h3>
+    <p>${canShare
+      ? "Das Teilen-Menü konnte nicht automatisch geöffnet werden."
+      : "Dieser Browser kann PDFs nicht direkt an andere Apps übergeben."}
+      Lade das PDF herunter und hänge es in Outlook, Mail oder WhatsApp an.</p>
+    <div class="share-options">
+      ${canShare ? `<button class="btn btn-primary" id="m-share">Teilen …</button>` : ""}
+      <button class="btn ${canShare ? "" : "btn-primary"}" id="m-download">PDF herunterladen</button>
+      <a class="btn" id="m-mail" href="${esc(mailto)}">E-Mail-Entwurf öffnen</a>
+      <button class="btn" id="m-close">Schliessen</button>
+    </div>
+  `;
+  modalBackdrop.hidden = false;
+  document.getElementById("m-close").addEventListener("click", closeModal);
+  document.getElementById("m-download").addEventListener("click", () => { downloadPdf(pdf); showToast("PDF heruntergeladen."); });
+  const shareNow = document.getElementById("m-share");
+  if (shareNow) shareNow.addEventListener("click", async () => {
+    try { await navigator.share({ files: [pdf.file], title: r.titel, text: r.titel }); closeModal(); }
+    catch (e) { if (!e || e.name !== "AbortError") showToast("Teilen nicht möglich – bitte PDF herunterladen.", true); }
+  });
 }
 
 function renderDetailActions(r) {
   detailActions.hidden = false;
+  shareBtn.hidden = false;
+  shareBtn.onclick = () => shareRecipe(r);
   document.getElementById("edit-btn").onclick = () => requireEdit(() => showForm(r));
   document.getElementById("delete-btn").onclick = () => requireEdit(() => confirmDelete(r));
 }
@@ -375,6 +479,7 @@ async function showForm(existing) {
   let selectedWineIds = [...(r.wein_empfehlung_ids || [])];
 
   detailActions.hidden = true;
+  shareBtn.hidden = true;
   detailBody.innerHTML = `<div class="loading-state">Lade Formular …</div>`;
   await ensureWinesLoaded();
   setView("detail");
