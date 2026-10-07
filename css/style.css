@@ -103,6 +103,8 @@ img{ max-width:100%; }
 @media(min-width:620px){ .filter-grid .wide{ grid-column:span 2; } }
 .range{ display:flex; gap:6px; align-items:center; }
 .range span{ color:var(--muted); }
+.range select{ flex:0 0 42%; width:auto; }
+.range input[type=date]{ min-width:0; }
 .filter-actions{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
 .filter-result{ color:var(--muted); font-size:.85rem; }
 #view-home, #view-list, #view-detail{ margin-top:12px; }
