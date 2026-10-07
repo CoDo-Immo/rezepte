@@ -92,6 +92,17 @@
         <label>Warte-/Ruhezeit (Min.)</label>
         <div class="range"><input id="fl-wait-min" type="number" min="0" placeholder="von"><span>–</span><input id="fl-wait-max" type="number" min="0" placeholder="bis"></div>
       </div>
+      <div class="field">
+        <label for="fl-erfasst-mode">Erfasst am</label>
+        <div class="range">
+          <select id="fl-erfasst-mode">
+            <option value="">Egal</option>
+            <option value="younger">jünger als</option>
+            <option value="older">älter als</option>
+          </select>
+          <input id="fl-erfasst-date" type="date" aria-label="Datum">
+        </div>
+      </div>
       <div class="field wide">
         <label for="fl-wein-text">Weinempfehlung</label>
         <input id="fl-wein-text" type="text" placeholder="Wein suchen, z. B. Name oder Weingut …" autocomplete="off">
