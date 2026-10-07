@@ -59,6 +59,7 @@ const FL = {
   zeitMin: document.getElementById("fl-zeit-min"), zeitMax: document.getElementById("fl-zeit-max"),
   waitMin: document.getElementById("fl-wait-min"), waitMax: document.getElementById("fl-wait-max"),
   wein: document.getElementById("fl-wein"), weinText: document.getElementById("fl-wein-text"),
+  erfasstMode: document.getElementById("fl-erfasst-mode"), erfasstDate: document.getElementById("fl-erfasst-date"),
 };
 
 function setView(v) {
@@ -85,7 +86,7 @@ async function loadRecipes() {
   recipeList.innerHTML = `<div class="loading-state">Lade Rezepte …</div>`;
   const { data, error } = await supabase
     .from("rezepte")
-    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids")
+    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, erfasst_am")
     .order("titel", { ascending: true });
   if (error) {
     showToast("Fehler beim Laden der Rezepte: " + error.message, true);
@@ -245,12 +246,26 @@ function inRange(val, minEl, maxEl) {
   if (val === null || val === undefined) return false;
   return (min === null || val >= min) && (max === null || val <= max);
 }
+// ---------- Datum (Erfassung) ----------
+// erfasst_am ist ein reines Datum (YYYY-MM-DD); ISO-Strings lassen sich direkt vergleichen.
+function todayIso() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function formatDateCH(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}
+function erfasstFilterActive() { return !!FL.erfasstMode.value && !!FL.erfasstDate.value; }
+
 function activeFilterCount() {
   let n = 0;
   if (Number(FL.bewertung.value) > 0) n++;
   if (FL.portMin.value !== "" || FL.portMax.value !== "") n++;
   if (FL.zeitMin.value !== "" || FL.zeitMax.value !== "") n++;
   if (FL.waitMin.value !== "" || FL.waitMax.value !== "") n++;
+  if (erfasstFilterActive()) n++;
   if (FL.wein.value || FL.weinText.value.trim()) n++;
   return n;
 }
@@ -261,6 +276,12 @@ function matchesFilters(r) {
   if (!inRange(r.portionen, FL.portMin, FL.portMax)) return false;
   if (!inRange(r.zubereitungszeit_min, FL.zeitMin, FL.zeitMax)) return false;
   if (!inRange(r.wartezeit_min, FL.waitMin, FL.waitMax)) return false;
+  if (erfasstFilterActive()) {
+    // jünger als = erfasst nach dem Datum, älter als = erfasst vor dem Datum (Datum selbst ausgeschlossen)
+    if (!r.erfasst_am) return false;
+    if (FL.erfasstMode.value === "younger" && !(r.erfasst_am > FL.erfasstDate.value)) return false;
+    if (FL.erfasstMode.value === "older" && !(r.erfasst_am < FL.erfasstDate.value)) return false;
+  }
   const ids = (r.wein_empfehlung_ids || []).filter(Boolean);
   if (FL.wein.value === "with" && !ids.length) return false;
   if (FL.wein.value === "without" && ids.length) return false;
@@ -279,6 +300,7 @@ function updateFilterUi(shown) {
 }
 function resetFilters() {
   FL.bewertung.value = "0"; FL.wein.value = ""; FL.weinText.value = "";
+  FL.erfasstMode.value = ""; FL.erfasstDate.value = "";
   [FL.portMin, FL.portMax, FL.zeitMin, FL.zeitMax, FL.waitMin, FL.waitMax].forEach((el) => { el.value = ""; });
 }
 async function applyHomeState() {
@@ -314,6 +336,7 @@ async function showDetail(r) {
   if (r.zubereitungszeit_min) metaBits.push(`<span class="badge mono">${r.zubereitungszeit_min} Min. aktiv</span>`);
   if (r.wartezeit_min) metaBits.push(`<span class="badge mono">${r.wartezeit_min} Min. Ruhe/Gehzeit</span>`);
   if (r.schwierigkeit) metaBits.push(`<span class="badge">${esc(r.schwierigkeit)}</span>`);
+  if (r.erfasst_am) metaBits.push(`<span class="badge mono">Erfasst ${formatDateCH(r.erfasst_am)}</span>`);
   metaBits.push(starRowHtml(r.bewertung));
 
   const zutatenLines = (r.zutaten || "").split("\n").map((l) => l.trim()).filter(Boolean);
@@ -471,7 +494,7 @@ function renderDetailActions(r) {
 
 // ---------- form (neu / bearbeiten) ----------
 async function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [] };
+  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], erfasst_am: todayIso() };
   let bewertung = r.bewertung || 0;
   let selectedImageFile = null;
   let imageRemoved = false;
@@ -516,6 +539,10 @@ async function showForm(existing) {
       <div class="field">
         <label>Bewertung</label>
         <div id="f-bewertung"></div>
+      </div>
+      <div class="field">
+        <label for="f-erfasst">Erfasst am</label>
+        <input id="f-erfasst" type="date" value="${esc(r.erfasst_am || todayIso())}">
       </div>
       <div class="field span-2">
         <label>Bild</label>
@@ -657,6 +684,7 @@ async function showForm(existing) {
       notizen: document.getElementById("f-notizen").value || null,
       quelle: document.getElementById("f-quelle").value || null,
       wein_empfehlung_ids: selectedWineIds.length ? selectedWineIds : null,
+      erfasst_am: document.getElementById("f-erfasst").value || todayIso(),
     };
     if (!payload.titel) { showToast("Bitte einen Titel angeben.", true); return; }
 
