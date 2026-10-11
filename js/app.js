@@ -115,7 +115,18 @@ async function loadCategories() {
 }
 
 function renderFooter() {
-  footerEl.textContent = `${RECIPES.length} Rezepte · Version ${APP_VERSION}`;
+  footerEl.innerHTML = "";
+  const info = document.createElement("div");
+  info.textContent = `${RECIPES.length} Rezepte · Version ${APP_VERSION}`;
+  const hint = document.createElement("div");
+  hint.className = "footer-hint";
+  const link = document.createElement("a");
+  link.href = "https://github.com/CoDo-Immo/rezepte/blob/main/skills/rezepte-weinzuordnung/SKILL.md";
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "Claude-Skill «rezepte-weinzuordnung»";
+  hint.append("Weinzuordnung per ", link);
+  footerEl.append(info, hint);
 }
 
 // Lädt einmalig alle Weine (für Anzeige + Such-Auswahl in der Weinempfehlung).
