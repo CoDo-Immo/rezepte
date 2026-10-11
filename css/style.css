@@ -298,4 +298,6 @@ body:not(.can-edit) #detail-actions{
 
 [hidden]{ display:none !important; }
 
+.app-footer .footer-hint{ margin-top:4px; opacity:.8; }
+.app-footer .footer-hint a{ color:inherit; text-decoration:underline; }
 .app-footer{ margin-top:40px; padding-top:14px; border-top:1px solid var(--line); text-align:center; font-size:.75rem; color:var(--muted); }
