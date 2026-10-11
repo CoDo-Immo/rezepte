@@ -2,7 +2,7 @@
 // (Chrome/Android verlangt einen registrierten Service Worker) und
 // eine kleine App-Shell-Cache benötigt. Rezeptdaten kommen immer live
 // von Supabase, werden hier nicht zwischengespeichert.
-const CACHE_NAME = "rezepte-shell-v6";
+const CACHE_NAME = "rezepte-shell-v8";
 const SHELL_FILES = [
   "./",
   "./index.html",

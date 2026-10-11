@@ -109,7 +109,7 @@ Löschen ist nur ohne zugeordnete Rezepte möglich.
 
 ## Fusszeile
 
-Zeigt Anzahl Rezepte und App-Version (`APP_VERSION` in `js/config.js`).
+Zeigt Anzahl Rezepte und App-Version (`APP_VERSION` in `js/config.js`) sowie einen Hinweis auf den Claude-Skill `rezepte-weinzuordnung` (Weinzuordnung mit Recherche). Der Skill liegt als lesbare Datei im Repo unter `skills/rezepte-weinzuordnung/SKILL.md`; die Fusszeile verlinkt darauf.
 
 ## Bilder (Supabase Storage)
 
