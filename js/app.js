@@ -678,7 +678,7 @@ async function showForm(existing) {
   wineSearchEl.addEventListener("blur", () => setTimeout(() => { wineSuggestionsEl.hidden = true; }, 150));
 
   document.getElementById("f-cancel").addEventListener("click", () => {
-    if (existing) showDetail(existing); else backFromDetail();
+    backFromDetail();
   });
   document.getElementById("f-save").addEventListener("click", async () => {
     const saveBtn = document.getElementById("f-save");
@@ -740,8 +740,7 @@ async function saveRecipe(payload, id) {
   }
   showToast(id ? "Rezept aktualisiert." : "Rezept angelegt.");
   await loadRecipes();
-  if (currentCategory) showList(currentCategory);
-  else setView("home");
+  backFromDetail();
 }
 
 function confirmDelete(r) {
@@ -761,7 +760,7 @@ function confirmDelete(r) {
     if (error) { showToast("Löschen fehlgeschlagen: " + error.message, true); return; }
     showToast("Rezept gelöscht.");
     await loadRecipes();
-    if (currentCategory) showList(currentCategory); else setView("home");
+    backFromDetail();
   });
 }
 
