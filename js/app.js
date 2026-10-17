@@ -44,6 +44,7 @@ const detailBody = document.getElementById("detail-body");
 const detailActions = document.getElementById("detail-actions");
 const shareBtn = document.getElementById("share-btn");
 const search = document.getElementById("search");
+const filterReset = document.getElementById("filter-reset");
 const authBtn = document.getElementById("auth-btn");
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modalBox = document.getElementById("modal-box");
@@ -307,6 +308,7 @@ function updateFilterUi(shown) {
   filterBadge.hidden = n === 0;
   filterBadge.textContent = n;
   filterToggle.classList.toggle("active", n > 0 || !filterPanel.hidden);
+  filterReset.hidden = !(n > 0 || search.value.trim());
   filterResult.textContent = `${shown} von ${RECIPES.length} Rezepten`;
 }
 function resetFilters() {
@@ -325,15 +327,17 @@ async function showResults(q) {
   currentCategory = null;
   currentSearchTerm = q || "";
   if (FL.wein.value === "with" || FL.weinText.value.trim()) await ensureWinesLoaded();
-  const ql = (q || "").toLowerCase();
-  const list = RECIPES.filter((r) =>
-    (!ql ||
-      (r.titel || "").toLowerCase().includes(ql) ||
-      (r.zutaten || "").toLowerCase().includes(ql) ||
-      (r.zubereitung || "").toLowerCase().includes(ql)) &&
-    matchesFilters(r)
-  );
-  listTitle.textContent = q ? `Suche: „${q}“` : "Gefilterte Rezepte";
+  // Mehrere Suchbegriffe mit Komma (oder Semikolon) trennen: ein Rezept muss ALLE Begriffe enthalten
+  // (in Titel, Zutaten oder Zubereitung, auch verteilt auf verschiedene Felder).
+  const terms = (q || "").toLowerCase().split(/[,;]+/).map((t) => t.trim()).filter(Boolean);
+  const list = RECIPES.filter((r) => {
+    if (terms.length) {
+      const hay = `${r.titel || ""}\n${r.zutaten || ""}\n${r.zubereitung || ""}`.toLowerCase();
+      if (!terms.every((t) => hay.includes(t))) return false;
+    }
+    return matchesFilters(r);
+  });
+  listTitle.textContent = terms.length ? `Suche: „${terms.join(", ")}“` : "Gefilterte Rezepte";
   listCount.textContent = `${list.length} Treffer`;
   updateFilterUi(list.length);
   renderRecipeCards(list, recipeList);
@@ -825,8 +829,8 @@ authBtn.addEventListener("click", async () => {
   resetFilters();
   filterPanel.hidden = true;
   filterToggle.setAttribute("aria-expanded", "false");
-  updateFilterUi(0);
   search.value = "";
+  updateFilterUi(0);
   currentSearchTerm = "";
   currentCategory = null;
   showToast("Abgemeldet.");
@@ -837,8 +841,8 @@ onAuthChange(updateAuthUi);
 // ---------- global events ----------
 function goHome() {
   resetFilters();
-  updateFilterUi(RECIPES.length);
   search.value = "";
+  updateFilterUi(RECIPES.length);
   currentSearchTerm = "";
   currentCategory = null;
   setView("home");
@@ -871,8 +875,9 @@ Object.values(FL).forEach((el) => {
     searchTimer = setTimeout(applyHomeState, 150);
   });
 });
-document.getElementById("filter-reset").addEventListener("click", () => {
+filterReset.addEventListener("click", () => {
   resetFilters();
+  search.value = "";
   applyHomeState();
 });
 
