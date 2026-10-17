@@ -93,6 +93,14 @@ img{ max-width:100%; }
 }
 .filter-toggle svg{ width:17px; height:17px; }
 .filter-toggle:hover, .filter-toggle.active{ border-color:var(--accent); color:var(--accent); }
+.reset-btn{
+  display:inline-flex; align-items:center; gap:8px; padding:0 14px; border-radius:14px; border:1px solid var(--line);
+  background:var(--surface); color:var(--ink); font:inherit; font-size:.92rem; cursor:pointer; box-shadow:var(--shadow);
+}
+.reset-btn[hidden]{ display:none; }
+.reset-btn svg{ width:17px; height:17px; }
+.reset-btn:hover{ border-color:var(--accent); color:var(--accent); }
+@media(max-width:560px){ .reset-btn span{ display:none; } .reset-btn{ padding:0 12px; } }
 .filter-badge{
   background:var(--accent); color:#fff; border-radius:99px; font-size:.72rem; min-width:20px; height:20px;
   display:inline-flex; align-items:center; justify-content:center; padding:0 6px;
