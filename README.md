@@ -109,7 +109,7 @@ Löschen ist nur ohne zugeordnete Rezepte möglich.
 
 ## Fusszeile
 
-Zeigt Anzahl Rezepte und App-Version (`APP_VERSION` in `js/config.js`) sowie einen Hinweis auf den Claude-Skill `rezepte-weinzuordnung` (Weinzuordnung mit Recherche). Der Skill liegt als lesbare Datei im Repo unter `skills/rezepte-weinzuordnung/SKILL.md`; die Fusszeile verlinkt darauf.
+Zeigt Anzahl Rezepte und App-Version (`APP_VERSION` in `js/config.js`) sowie den Link «Weine mit Claude zuordnen» mit dem Text «Startet den Skill «rezepte-weinzuordnung» in Claude (Vorschläge prüfen, dann freigeben).» (analog Weinkeller-App). Der Link öffnet `claude.ai/new` mit vorbereitetem Auftrag; Gian sendet ihn ab, Claude führt den Skill aus und schreibt erst nach Freigabe nach Supabase. Der Skill liegt als lesbare Kopie im Repo unter `skills/rezepte-weinzuordnung/SKILL.md`.
 
 ## Bilder (Supabase Storage)
 
