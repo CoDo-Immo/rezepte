@@ -1,7 +1,7 @@
 {
-  "name": "Rezepte",
-  "short_name": "Rezepte",
-  "description": "Privates Rezeptarchiv aus der OneNote-Ablage",
+  "name": "Rezepte Jill",
+  "short_name": "Rezepte Jill",
+  "description": "persönliche Rezeptsammlung mit eigenen Erfahrungen",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
