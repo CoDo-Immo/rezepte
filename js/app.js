@@ -122,11 +122,11 @@ function renderFooter() {
   const hint = document.createElement("div");
   hint.className = "footer-hint";
   const link = document.createElement("a");
-  link.href = "https://github.com/CoDo-Immo/rezepte/blob/main/skills/rezepte-weinzuordnung/SKILL.md";
+  link.href = "https://claude.ai/new?q=" + encodeURIComponent("Weine zuordnen: Weinzuordnung laufen lassen (Skill rezepte-weinzuordnung)");
   link.target = "_blank";
   link.rel = "noopener";
-  link.textContent = "Claude-Skill «rezepte-weinzuordnung»";
-  hint.append("Weinzuordnung per ", link);
+  link.textContent = "Weine mit Claude zuordnen";
+  hint.append(link, document.createElement("br"), "Startet den Skill «rezepte-weinzuordnung» in Claude (Vorschläge prüfen, dann freigeben).");
   footerEl.append(info, hint);
 }
 
