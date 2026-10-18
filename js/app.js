@@ -22,7 +22,6 @@ let WINES_BY_ID = {};
 let ALL_WINES = null;
 let currentCategory = null;
 let currentSearchTerm = "";
-let detailStack = []; // Verlauf bei Rezept-zu-Rezept-Navigation (Rezept-IDs)
 let REBSORTEN = null;
 const IMAGE_BUCKET = "rezeptbilder";
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -245,6 +244,7 @@ function renderRecipeCards(list, container) {
 }
 
 function showList(cat) {
+  resetDetailHistory();
   currentCategory = cat;
   currentSearchTerm = "";
   listTitle.textContent = cat;
@@ -327,6 +327,7 @@ async function applyHomeState() {
 
 // ---------- Trefferliste (Suche und/oder Filter) ----------
 async function showResults(q) {
+  resetDetailHistory();
   currentCategory = null;
   currentSearchTerm = q || "";
   if (FL.wein.value === "with" || FL.weinText.value.trim()) await ensureWinesLoaded();
@@ -349,8 +350,9 @@ async function showResults(q) {
 
 // ---------- detail view ----------
 async function showDetail(r, opts = {}) {
-  if (!opts.keep) detailStack = [];
-  if (!opts.noPush) { try { history.pushState({ v: "detail", id: r.id }, ""); } catch (_e) { /* optional */ } }
+  // Jede Detailansicht ist ein History-Eintrag (Tiefe d); Zurück (Button, Browser, Handy) führt so
+  // immer zum vorherigen Rezept bzw. zur Liste.
+  if (!opts.noPush) { try { history.pushState({ v: "detail", id: r.id, d: historyDepth() + 1 }, ""); } catch (_e) { /* optional */ } }
   const metaBits = [];
   if (r.portionen) metaBits.push(`<span class="badge mono">${r.portionen} Port.</span>`);
   if (r.zubereitungszeit_min) metaBits.push(`<span class="badge mono">${r.zubereitungszeit_min} Min. aktiv</span>`);
@@ -410,8 +412,7 @@ async function showDetail(r, opts = {}) {
   detailBody.querySelectorAll(".link-item").forEach((b) => b.addEventListener("click", () => {
     const target = RECIPES.find((x) => String(x.id) === b.dataset.recipeId);
     if (!target) return;
-    detailStack.push(r.id);
-    showDetail(target, { keep: true });
+    showDetail(target);
     window.scrollTo(0, 0);
   }));
   renderDetailActions(r);
@@ -754,7 +755,8 @@ async function showForm(existing) {
   linkSearchEl.addEventListener("blur", () => setTimeout(() => { linkSuggestionsEl.hidden = true; }, 150));
 
   document.getElementById("f-cancel").addEventListener("click", () => {
-    backFromDetail();
+    if (existing) showDetail(existing, { noPush: true }); // Bearbeiten abgebrochen: zurück zum selben Rezept
+    else goBack();
   });
   document.getElementById("f-save").addEventListener("click", async () => {
     const saveBtn = document.getElementById("f-save");
@@ -817,7 +819,7 @@ async function saveRecipe(payload, id) {
   }
   showToast(id ? "Rezept aktualisiert." : "Rezept angelegt.");
   await loadRecipes();
-  backFromDetail();
+  goBack();
 }
 
 function confirmDelete(r) {
@@ -837,15 +839,25 @@ function confirmDelete(r) {
     if (error) { showToast("Löschen fehlgeschlagen: " + error.message, true); return; }
     showToast("Rezept gelöscht.");
     await loadRecipes();
-    backFromDetail();
+    goBack();
   });
 }
 
-function backFromDetail() {
-  while (detailStack.length) {
-    const prev = RECIPES.find((x) => x.id === detailStack.pop());
-    if (prev) { showDetail(prev, { keep: true, noPush: true }); return; }
-  }
+function historyDepth() {
+  return (history.state && history.state.v === "detail" && history.state.d) || 0;
+}
+// History auf den Stand «keine Detailansicht» zurücksetzen (z. B. beim Wechsel zur Liste/Startseite)
+function resetDetailHistory() {
+  const d = historyDepth();
+  if (d) { try { history.go(-d); } catch (_e) { /* optional */ } }
+}
+// Eine Ebene zurück: Browser-History (löst popstate aus); ohne History-Eintrag direkt zur Liste
+function goBack() {
+  if (historyDepth()) history.back();
+  else leaveDetail();
+}
+
+function leaveDetail() {
   if (currentSearchTerm || (!currentCategory && filtersActive())) showResults(currentSearchTerm);
   else if (currentCategory) showList(currentCategory);
   else setView("home");
@@ -977,7 +989,7 @@ onAuthChange(updateAuthUi);
 
 // ---------- global events ----------
 function goHome() {
-  detailStack = [];
+  resetDetailHistory();
   resetFilters();
   search.value = "";
   updateFilterUi(RECIPES.length);
@@ -990,12 +1002,14 @@ document.getElementById("home-btn").addEventListener("keypress", (e) => { if (e.
 document.getElementById("list-back").addEventListener("click", goHome);
 document.getElementById("list-home").addEventListener("click", goHome);
 // Zurück: über die Browser-History, damit App-Button und Browser-/Handy-Zurück gleich funktionieren
-document.getElementById("detail-back").addEventListener("click", () => {
-  if (history.state && history.state.v === "detail") history.back();
-  else backFromDetail();
-});
-window.addEventListener("popstate", () => {
-  if (!viewDetail.hidden) backFromDetail();
+document.getElementById("detail-back").addEventListener("click", goBack);
+window.addEventListener("popstate", (e) => {
+  const st = e.state;
+  if (st && st.v === "detail") {
+    const rec = RECIPES.find((x) => x.id === st.id);
+    if (rec) { showDetail(rec, { noPush: true }); return; }
+  }
+  if (!viewDetail.hidden) leaveDetail();
 });
 document.getElementById("detail-home").addEventListener("click", goHome);
 document.getElementById("add-btn").addEventListener("click", () => requireEdit(() => showForm(null)));
