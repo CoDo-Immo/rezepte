@@ -15,6 +15,16 @@ also direkt über GitHub Pages oder jeden anderen statischen Hoster ausliefern.
   Such-Auswahl (Autocomplete + entfernbare Chips) aus dem Weinkeller wählbar
   — erfordert Login, da die `wines`-Tabelle nur für angemeldete Nutzer lesbar
   ist (gleiche Privatsphäre-Regel wie in der Weinkeller-App)
+- Wein-Popup (ab 2.0): Die Weine der Weinempfehlung sind anklickbar und öffnen
+  ein Popup mit Details aus der `wines`-Tabelle (Bild, Herkunft, Degustation,
+  «Passt zu», Körper/Säure/Tannin, Trinktemperatur, Dekantierung, Charakter der
+  Rebsorte aus `rebsorten`). Mehrere Jahrgänge desselben Weins (gleicher Name und
+  Weingut) lassen sich im Popup per Jahr-Schalter wechseln.
+- Verknüpfte Rezepte (ab 2.0): Pro Rezept können andere Rezepte verlinkt werden
+  (Feld `verknuepfte_rezepte_ids`, im Formular per Such-Auswahl mit Chips). Die
+  Detailansicht zeigt sie als Block «Siehe auch»; Klick öffnet das Rezept, «Zurück»
+  führt zum vorherigen Rezept. Die Verknüpfung ist einseitig (nur im Rezept sichtbar,
+  in dem sie gesetzt wurde). Im PDF erscheinen die Titel als Text.
 - Bildupload pro Rezept (JPEG/PNG/WebP, max. 3 MB) über Supabase Storage
   (Bucket `rezeptbilder`), mit Vorschau, Ersetzen und Entfernen im Formular;
   Bild erscheint in der Detailansicht und als Thumbnail in der Listenkarte
@@ -97,6 +107,7 @@ Tabelle `rezepte` (Auszug):
 | `zubereitung` | text | freier Text, ein Absatz/Schritt pro Zeile |
 | `notizen`, `quelle` | text | optional |
 | `wein_empfehlung_ids` | text[] | Referenzen auf `wines.id` (kein FK) |
+| `verknuepfte_rezepte_ids` | bigint[] | Referenzen auf andere `rezepte.id` (kein FK, einseitig) |
 
 ## Kategorien (dynamisch)
 

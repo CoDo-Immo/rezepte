@@ -22,6 +22,8 @@ let WINES_BY_ID = {};
 let ALL_WINES = null;
 let currentCategory = null;
 let currentSearchTerm = "";
+let detailStack = []; // Verlauf bei Rezept-zu-Rezept-Navigation (Rezept-IDs)
+let REBSORTEN = null;
 const IMAGE_BUCKET = "rezeptbilder";
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -79,6 +81,7 @@ function showToast(msg, isError = false) {
 
 function closeModal() {
   modalBackdrop.hidden = true;
+  modalBox.className = "modal";
   modalBox.innerHTML = "";
 }
 
@@ -87,7 +90,7 @@ async function loadRecipes() {
   recipeList.innerHTML = `<div class="loading-state">Lade Rezepte …</div>`;
   const { data, error } = await supabase
     .from("rezepte")
-    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, erfasst_am")
+    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, verknuepfte_rezepte_ids, erfasst_am")
     .order("titel", { ascending: true });
   if (error) {
     showToast("Fehler beim Laden der Rezepte: " + error.message, true);
@@ -345,7 +348,8 @@ async function showResults(q) {
 }
 
 // ---------- detail view ----------
-async function showDetail(r) {
+async function showDetail(r, opts = {}) {
+  if (!opts.keep) detailStack = [];
   const metaBits = [];
   if (r.portionen) metaBits.push(`<span class="badge mono">${r.portionen} Port.</span>`);
   if (r.zubereitungszeit_min) metaBits.push(`<span class="badge mono">${r.zubereitungszeit_min} Min. aktiv</span>`);
@@ -378,11 +382,16 @@ async function showDetail(r) {
   const wineIds = (r.wein_empfehlung_ids || []).filter(Boolean);
   if (wineIds.length) {
     await ensureWinesLoaded();
-    const names = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean).map(wineLabel);
-    if (names.length) {
-      wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${names.map((n) => `<div class="wv">${esc(n)}</div>`).join("")}</div></div>`;
+    const ws = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean);
+    if (ws.length) {
+      wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${ws.map((w) => `<button type="button" class="wv wine-link" data-wine-id="${esc(w.id)}" title="Weindetails anzeigen">${esc(wineLabel(w))}</button>`).join("")}</div></div>`;
     }
   }
+
+  const linked = linkedRecipes(r);
+  const linkHtml = linked.length
+    ? `<div class="link-box"><div class="lt">Siehe auch</div>${linked.map((x) => `<button type="button" class="link-item" data-recipe-id="${esc(x.id)}"><span>${esc(x.titel)}</span><span class="link-cat">${esc(x.kategorie)}</span></button>`).join("")}</div>`
+    : "";
 
   detailBody.innerHTML = `
     ${r.bild_url ? `<img class="detail-image" src="${esc(r.bild_url)}" alt="${esc(r.titel)}">` : ""}
@@ -390,15 +399,29 @@ async function showDetail(r) {
     <h2 style="margin-top:8px">${esc(r.titel)}</h2>
     <div class="detail-meta">${metaBits.join("")}</div>
     ${content}
+    ${linkHtml}
     ${wineHtml}
     ${r.notizen ? `<p class="note">${esc(r.notizen)}</p>` : ""}
     ${r.quelle ? `<p class="note" style="margin-top:10px">Quelle: <span class="source-link">${esc(r.quelle)}</span></p>` : ""}
   `;
   detailBody.dataset.recipeId = r.id;
+  detailBody.querySelectorAll(".wine-link").forEach((b) => b.addEventListener("click", () => showWineModal(b.dataset.wineId)));
+  detailBody.querySelectorAll(".link-item").forEach((b) => b.addEventListener("click", () => {
+    const target = RECIPES.find((x) => String(x.id) === b.dataset.recipeId);
+    if (!target) return;
+    detailStack.push(r.id);
+    showDetail(target, { keep: true });
+    window.scrollTo(0, 0);
+  }));
   renderDetailActions(r);
   setView("detail");
   // PDF im Hintergrund vorbereiten, damit das Teilen beim Klick sofort startet
   getRecipePdf(r).catch(() => {});
+}
+
+// Verknüpfte Rezepte (einseitig gesetzt: nur was dieses Rezept selbst verlinkt)
+function linkedRecipes(r) {
+  return (r.verknuepfte_rezepte_ids || []).map((id) => RECIPES.find((x) => x.id === id)).filter(Boolean);
 }
 
 // ---------- PDF teilen ----------
@@ -415,7 +438,8 @@ async function wineLabelsFor(r) {
 }
 
 function getRecipePdf(r) {
-  const sig = JSON.stringify(r);
+  const linked = linkedRecipes(r).map((x) => x.titel);
+  const sig = JSON.stringify(r) + JSON.stringify(linked);
   const hit = PDF_CACHE.get(r.id);
   if (hit && hit.sig === sig) return hit.promise;
   const promise = (async () => {
@@ -423,7 +447,7 @@ function getRecipePdf(r) {
       wineLabelsFor(r),
       r.bild_url ? loadImageForPdf(r.bild_url).catch(() => null) : Promise.resolve(null),
     ]);
-    const { blob, filename } = await buildRecipePdf(r, { wines, image });
+    const { blob, filename } = await buildRecipePdf(r, { wines, image, linked });
     return { blob, filename, file: new File([blob], filename, { type: "application/pdf" }) };
   })();
   PDF_CACHE.set(r.id, { sig, promise });
@@ -509,12 +533,13 @@ function renderDetailActions(r) {
 
 // ---------- form (neu / bearbeiten) ----------
 async function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], erfasst_am: todayIso() };
+  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], verknuepfte_rezepte_ids: [], erfasst_am: todayIso() };
   let bewertung = r.bewertung || 0;
   let selectedImageFile = null;
   let imageRemoved = false;
   const originalBildUrl = r.bild_url || null;
   let selectedWineIds = [...(r.wein_empfehlung_ids || [])];
+  let selectedLinkIds = [...(r.verknuepfte_rezepte_ids || [])];
 
   detailActions.hidden = true;
   shareBtn.hidden = true;
@@ -597,6 +622,15 @@ async function showForm(existing) {
           <div class="wine-suggestions" id="f-wine-suggestions" hidden></div>
         </div>
         <p class="field-hint">${ALL_WINES && ALL_WINES.length ? "Aus dem Weinkeller auswählen." : "Keine Weine im Weinkeller gefunden."}</p>
+      </div>
+      <div class="field span-2">
+        <label for="f-link-search">Verknüpfte Rezepte (Siehe auch)</label>
+        <div class="wine-picker">
+          <div class="wine-chips" id="f-link-chips"></div>
+          <input id="f-link-search" type="text" placeholder="Rezept suchen …" autocomplete="off">
+          <div class="wine-suggestions" id="f-link-suggestions" hidden></div>
+        </div>
+        <p class="field-hint">Die Verknüpfung gilt nur in diesem Rezept (einseitig).</p>
       </div>
     </div>
     <div class="form-actions">
@@ -681,6 +715,43 @@ async function showForm(existing) {
   wineSearchEl.addEventListener("input", () => renderWineSuggestions(wineSearchEl.value));
   wineSearchEl.addEventListener("blur", () => setTimeout(() => { wineSuggestionsEl.hidden = true; }, 150));
 
+  // ---- Verknüpfte Rezepte ----
+  const linkChipsEl = document.getElementById("f-link-chips");
+  const linkSearchEl = document.getElementById("f-link-search");
+  const linkSuggestionsEl = document.getElementById("f-link-suggestions");
+  function renderLinkChips() {
+    linkChipsEl.innerHTML = selectedLinkIds.map((id) => {
+      const t = RECIPES.find((x) => x.id === id);
+      return `<span class="chip">${esc(t ? t.titel : "Rezept " + id)}<button type="button" class="chip-remove" data-id="${esc(id)}" aria-label="Entfernen">×</button></span>`;
+    }).join("");
+    linkChipsEl.querySelectorAll(".chip-remove").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedLinkIds = selectedLinkIds.filter((id) => String(id) !== btn.dataset.id);
+        renderLinkChips();
+      });
+    });
+  }
+  renderLinkChips();
+  function renderLinkSuggestions(query) {
+    const ql = query.trim().toLowerCase();
+    const matches = ql
+      ? RECIPES.filter((x) => (!existing || x.id !== existing.id) && !selectedLinkIds.includes(x.id) && (x.titel || "").toLowerCase().includes(ql)).slice(0, 8)
+      : [];
+    if (!matches.length) { linkSuggestionsEl.hidden = true; linkSuggestionsEl.innerHTML = ""; return; }
+    linkSuggestionsEl.innerHTML = matches.map((x) => `<button type="button" class="wine-suggestion" data-id="${esc(x.id)}">${esc(x.titel)} <span class="link-cat">${esc(x.kategorie)}</span></button>`).join("");
+    linkSuggestionsEl.hidden = false;
+    linkSuggestionsEl.querySelectorAll(".wine-suggestion").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedLinkIds.push(Number(btn.dataset.id));
+        linkSearchEl.value = "";
+        linkSuggestionsEl.hidden = true;
+        renderLinkChips();
+      });
+    });
+  }
+  linkSearchEl.addEventListener("input", () => renderLinkSuggestions(linkSearchEl.value));
+  linkSearchEl.addEventListener("blur", () => setTimeout(() => { linkSuggestionsEl.hidden = true; }, 150));
+
   document.getElementById("f-cancel").addEventListener("click", () => {
     backFromDetail();
   });
@@ -699,6 +770,7 @@ async function showForm(existing) {
       notizen: document.getElementById("f-notizen").value || null,
       quelle: document.getElementById("f-quelle").value || null,
       wein_empfehlung_ids: selectedWineIds.length ? selectedWineIds : null,
+      verknuepfte_rezepte_ids: selectedLinkIds.length ? selectedLinkIds : null,
       erfasst_am: document.getElementById("f-erfasst").value || todayIso(),
     };
     if (!payload.titel) { showToast("Bitte einen Titel angeben.", true); return; }
@@ -769,9 +841,68 @@ function confirmDelete(r) {
 }
 
 function backFromDetail() {
+  while (detailStack.length) {
+    const prev = RECIPES.find((x) => x.id === detailStack.pop());
+    if (prev) { showDetail(prev, { keep: true }); return; }
+  }
   if (currentSearchTerm || (!currentCategory && filtersActive())) showResults(currentSearchTerm);
   else if (currentCategory) showList(currentCategory);
   else setView("home");
+}
+
+// ---------- Wein-Popup (Details aus dem Weinkeller) ----------
+async function ensureRebsortenLoaded() {
+  if (REBSORTEN) return REBSORTEN;
+  const { data, error } = await supabase.from("rebsorten").select("name, charakter, aliase");
+  REBSORTEN = error ? [] : (data || []);
+  return REBSORTEN;
+}
+function rebsortenFor(sorte) {
+  if (!sorte || !REBSORTEN) return [];
+  const parts = String(sorte).split(/[,;/&+]| und /i).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return REBSORTEN.filter((rb) => {
+    const names = [rb.name, ...String(rb.aliase || "").split(/[,;]/)].map((s) => s.trim().toLowerCase()).filter(Boolean);
+    return parts.some((p) => names.includes(p));
+  });
+}
+
+async function showWineModal(id) {
+  modalBox.className = "modal modal-wide";
+  modalBox.innerHTML = `<p>Lade Wein …</p>`;
+  modalBackdrop.hidden = false;
+  const { data: w, error } = await supabase.from("wines").select("*").eq("id", id).maybeSingle();
+  if (error || !w) { closeModal(); showToast("Wein konnte nicht geladen werden.", true); return; }
+  let sib = supabase.from("wines").select("id, jahr").eq("name", w.name).order("jahr", { ascending: true });
+  sib = w.weingut ? sib.eq("weingut", w.weingut) : sib.is("weingut", null);
+  const [sibRes] = await Promise.all([sib, ensureRebsortenLoaded()]);
+  const years = (sibRes && sibRes.data) || [];
+
+  const row = (label, val) => (val ? `<div class="wm-row"><div class="wm-label">${esc(label)}</div><div class="wm-text">${esc(val)}</div></div>` : "");
+  const bild = w.bild_url_gross || w.bild_url;
+  const herkunft = [w.land, w.gebiet, w.region].filter(Boolean).join(", ");
+  const struktur = [w.koerper && `Körper: ${w.koerper}`, w.saeure && `Säure: ${w.saeure}`, w.tannin && `Tannin: ${w.tannin}`].filter(Boolean).join(" · ");
+  const rebs = rebsortenFor(w.sorte).filter((rb) => rb.charakter);
+  const badges = [w.typ, w.sorte].filter(Boolean).map((b) => `<span class="badge">${esc(b)}</span>`).join("");
+
+  modalBox.innerHTML = `
+    ${bild ? `<img class="wine-modal-img" src="${esc(bild)}" alt="${esc(w.name)}">` : ""}
+    <h3>${esc(w.name)}</h3>
+    <div class="wm-sub">${esc([w.weingut, w.jahr].filter(Boolean).join(" · "))}</div>
+    ${badges ? `<div class="detail-meta" style="margin-top:8px">${badges}</div>` : ""}
+    ${years.length > 1 ? `<div class="wm-years">${years.map((y) => `<button type="button" class="wm-year${y.id === w.id ? " active" : ""}" data-id="${esc(y.id)}">${esc(y.jahr || "NV")}</button>`).join("")}</div>` : ""}
+    ${row("Herkunft", herkunft)}
+    ${row("Degustation", w.degustation)}
+    ${row("Passt zu", w.eignung)}
+    ${row("Struktur", struktur)}
+    ${row("Trinktemperatur", w.trinktemperatur)}
+    ${row("Dekantierung", w.dekantierung)}
+    ${rebs.map((rb) => row("Rebsorte " + rb.name, rb.charakter)).join("")}
+    <div class="form-actions"><button class="btn" id="wm-close">Schliessen</button></div>
+  `;
+  document.getElementById("wm-close").addEventListener("click", closeModal);
+  modalBox.querySelectorAll(".wm-year").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.id !== w.id) showWineModal(b.dataset.id);
+  }));
 }
 
 // ---------- auth ----------
@@ -840,6 +971,7 @@ onAuthChange(updateAuthUi);
 
 // ---------- global events ----------
 function goHome() {
+  detailStack = [];
   resetFilters();
   search.value = "";
   updateFilterUi(RECIPES.length);

@@ -73,7 +73,7 @@ function drawStar(doc, cx, cy, r, on) {
  * @param opts.image       optional { dataUrl, w, h } (JPEG, bereits zugeschnitten)
  * @returns {Promise<{blob: Blob, filename: string}>}
  */
-export async function buildRecipePdf(r, { wines = [], image = null } = {}) {
+export async function buildRecipePdf(r, { wines = [], image = null, linked = [] } = {}) {
   const jsPDF = await loadPdfLib();
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const titel = pdfText(r.titel || "Rezept");
@@ -191,6 +191,13 @@ export async function buildRecipePdf(r, { wines = [], image = null } = {}) {
     y += lineH(8.5) + 1.5;
     writeLines(wl, MARGIN + 6, 10.5);
     y = top + boxH + 6;
+  }
+
+  // --- Siehe auch (verknüpfte Rezepte) ---
+  const siehe = linked.map(pdfText).filter(Boolean);
+  if (siehe.length) {
+    writeLines(wrap("Siehe auch: " + siehe.join(", "), CW, 10), MARGIN, 10, { color: MUTED });
+    y += 3;
   }
 
   // --- Notizen / Quelle ---
