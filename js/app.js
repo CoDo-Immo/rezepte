@@ -350,6 +350,7 @@ async function showResults(q) {
 // ---------- detail view ----------
 async function showDetail(r, opts = {}) {
   if (!opts.keep) detailStack = [];
+  if (!opts.noPush) { try { history.pushState({ v: "detail", id: r.id }, ""); } catch (_e) { /* optional */ } }
   const metaBits = [];
   if (r.portionen) metaBits.push(`<span class="badge mono">${r.portionen} Port.</span>`);
   if (r.zubereitungszeit_min) metaBits.push(`<span class="badge mono">${r.zubereitungszeit_min} Min. aktiv</span>`);
@@ -843,7 +844,7 @@ function confirmDelete(r) {
 function backFromDetail() {
   while (detailStack.length) {
     const prev = RECIPES.find((x) => x.id === detailStack.pop());
-    if (prev) { showDetail(prev, { keep: true }); return; }
+    if (prev) { showDetail(prev, { keep: true, noPush: true }); return; }
   }
   if (currentSearchTerm || (!currentCategory && filtersActive())) showResults(currentSearchTerm);
   else if (currentCategory) showList(currentCategory);
@@ -882,6 +883,8 @@ async function showWineModal(id) {
   const herkunft = [w.land, w.gebiet, w.region].filter(Boolean).join(", ");
   const struktur = [w.koerper && `Körper: ${w.koerper}`, w.saeure && `Säure: ${w.saeure}`, w.tannin && `Tannin: ${w.tannin}`].filter(Boolean).join(" · ");
   const rebs = rebsortenFor(w.sorte).filter((rb) => rb.charakter);
+  const ratingRow = (label, n) => (n ? `<div class="wm-row"><div class="wm-label">${esc(label)}</div>${starRowHtml(n)}</div>` : "");
+  const flaschen = (w.anzahl === null || w.anzahl === undefined) ? "" : `${w.anzahl} ${w.anzahl === 1 ? "Flasche" : "Flaschen"}`;
   const badges = [w.typ, w.sorte].filter(Boolean).map((b) => `<span class="badge">${esc(b)}</span>`).join("");
 
   modalBox.innerHTML = `
@@ -896,6 +899,9 @@ async function showWineModal(id) {
     ${row("Struktur", struktur)}
     ${row("Trinktemperatur", w.trinktemperatur)}
     ${row("Dekantierung", w.dekantierung)}
+    ${row("Anzahl Flaschen", flaschen)}
+    ${ratingRow("Rating Gian", w.bewertung_gian)}
+    ${ratingRow("Rating Jill", w.bewertung_jill)}
     ${rebs.map((rb) => row("Rebsorte " + rb.name, rb.charakter)).join("")}
     <div class="form-actions"><button class="btn" id="wm-close">Schliessen</button></div>
   `;
@@ -983,7 +989,14 @@ document.getElementById("home-btn").addEventListener("click", goHome);
 document.getElementById("home-btn").addEventListener("keypress", (e) => { if (e.key === "Enter") goHome(); });
 document.getElementById("list-back").addEventListener("click", goHome);
 document.getElementById("list-home").addEventListener("click", goHome);
-document.getElementById("detail-back").addEventListener("click", backFromDetail);
+// Zurück: über die Browser-History, damit App-Button und Browser-/Handy-Zurück gleich funktionieren
+document.getElementById("detail-back").addEventListener("click", () => {
+  if (history.state && history.state.v === "detail") history.back();
+  else backFromDetail();
+});
+window.addEventListener("popstate", () => {
+  if (!viewDetail.hidden) backFromDetail();
+});
 document.getElementById("detail-home").addEventListener("click", goHome);
 document.getElementById("add-btn").addEventListener("click", () => requireEdit(() => showForm(null)));
 modalBackdrop.addEventListener("click", (e) => { if (e.target === modalBackdrop) closeModal(); });
