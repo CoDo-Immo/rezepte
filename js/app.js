@@ -56,6 +56,7 @@ const filterPanel = document.getElementById("filter-panel");
 const filterBadge = document.getElementById("filter-badge");
 const filterResult = document.getElementById("filter-result");
 const FL = {
+  kategorie: document.getElementById("fl-kategorie"),
   bewertung: document.getElementById("fl-bewertung"),
   portMin: document.getElementById("fl-port-min"), portMax: document.getElementById("fl-port-max"),
   zeitMin: document.getElementById("fl-zeit-min"), zeitMax: document.getElementById("fl-zeit-max"),
@@ -98,6 +99,7 @@ async function loadRecipes() {
   }
   RECIPES = data || [];
   await loadCategories();
+  renderCategoryFilter();
   renderCategoryGrid();
   renderFooter();
 }
@@ -115,6 +117,13 @@ async function loadCategories() {
     return;
   }
   CATEGORIES = data || [];
+}
+
+// Kategorie-Pulldown im Filter aus der Tabelle `kategorien` befüllen (Auswahl bleibt erhalten)
+function renderCategoryFilter() {
+  const current = FL.kategorie.value;
+  FL.kategorie.innerHTML = `<option value="">Alle</option>` + CATEGORIES.map((c) => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
+  FL.kategorie.value = CATEGORIES.some((c) => c.name === current) ? current : "";
 }
 
 function renderFooter() {
@@ -276,6 +285,7 @@ function erfasstFilterActive() { return !!FL.erfasstMode.value && !!FL.erfasstDa
 
 function activeFilterCount() {
   let n = 0;
+  if (FL.kategorie.value) n++;
   if (Number(FL.bewertung.value) > 0) n++;
   if (FL.portMin.value !== "" || FL.portMax.value !== "") n++;
   if (FL.zeitMin.value !== "" || FL.zeitMax.value !== "") n++;
@@ -286,6 +296,7 @@ function activeFilterCount() {
 }
 function filtersActive() { return activeFilterCount() > 0; }
 function matchesFilters(r) {
+  if (FL.kategorie.value && r.kategorie !== FL.kategorie.value) return false;
   const minStars = Number(FL.bewertung.value);
   if (minStars > 0 && (r.bewertung || 0) < minStars) return false;
   if (!inRange(r.portionen, FL.portMin, FL.portMax)) return false;
@@ -315,7 +326,7 @@ function updateFilterUi(shown) {
   filterResult.textContent = `${shown} von ${RECIPES.length} Rezepten`;
 }
 function resetFilters() {
-  FL.bewertung.value = "0"; FL.wein.value = ""; FL.weinText.value = "";
+  FL.kategorie.value = ""; FL.bewertung.value = "0"; FL.wein.value = ""; FL.weinText.value = "";
   FL.erfasstMode.value = ""; FL.erfasstDate.value = "";
   [FL.portMin, FL.portMax, FL.zeitMin, FL.zeitMax, FL.waitMin, FL.waitMax].forEach((el) => { el.value = ""; });
 }
