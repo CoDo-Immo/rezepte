@@ -323,7 +323,8 @@ function updateFilterUi(shown) {
   filterBadge.textContent = n;
   filterToggle.classList.toggle("active", n > 0 || !filterPanel.hidden);
   filterReset.hidden = !(n > 0 || search.value.trim());
-  filterResult.textContent = `${shown} von ${RECIPES.length} Rezepten`;
+  const scopeN = (currentCategory && !FL.kategorie.value) ? RECIPES.filter((r) => r.kategorie === currentCategory).length : RECIPES.length;
+  filterResult.textContent = `${shown} von ${scopeN} Rezepten`;
 }
 function resetFilters() {
   FL.kategorie.value = ""; FL.bewertung.value = "0"; FL.wein.value = ""; FL.weinText.value = "";
@@ -332,15 +333,23 @@ function resetFilters() {
 }
 async function applyHomeState() {
   const q = search.value.trim();
-  if (!q && !filtersActive()) { currentSearchTerm = ""; updateFilterUi(RECIPES.length); setView("home"); return; }
+  if (!q && !filtersActive()) {
+    currentSearchTerm = "";
+    updateFilterUi(RECIPES.length);
+    // In einer Kategorie bleiben (Suche geleert), sonst zur Startseite
+    if (currentCategory) showList(currentCategory); else setView("home");
+    return;
+  }
   await showResults(q);
 }
 
 // ---------- Trefferliste (Suche und/oder Filter) ----------
 async function showResults(q) {
   resetDetailHistory();
-  currentCategory = null;
+  // Wurde zuvor eine Kategorie gewählt (currentCategory), bleibt die Suche auf diese Kategorie beschränkt.
+  // Der Kategorie-Pulldown im Filter hat Vorrang (siehe matchesFilters).
   currentSearchTerm = q || "";
+  const scopeCat = FL.kategorie.value ? null : currentCategory;
   if (FL.wein.value === "with" || FL.weinText.value.trim()) await ensureWinesLoaded();
   // Mehrere Suchbegriffe mit Komma (oder Semikolon) trennen: ein Rezept muss ALLE Begriffe enthalten
   // (in Titel, Zutaten oder Zubereitung, auch verteilt auf verschiedene Felder).
@@ -350,9 +359,11 @@ async function showResults(q) {
       const hay = `${r.titel || ""}\n${r.zutaten || ""}\n${r.zubereitung || ""}`.toLowerCase();
       if (!terms.every((t) => hay.includes(t))) return false;
     }
+    if (scopeCat && r.kategorie !== scopeCat) return false;
     return matchesFilters(r);
   });
-  listTitle.textContent = terms.length ? `Suche: „${terms.join(", ")}“` : "Gefilterte Rezepte";
+  const catPrefix = scopeCat ? `${scopeCat} · ` : "";
+  listTitle.textContent = terms.length ? `${catPrefix}Suche: „${terms.join(", ")}“` : `${catPrefix}Gefilterte Rezepte`;
   listCount.textContent = `${list.length} Treffer`;
   updateFilterUi(list.length);
   renderRecipeCards(list, recipeList);
@@ -869,7 +880,7 @@ function goBack() {
 }
 
 function leaveDetail() {
-  if (currentSearchTerm || (!currentCategory && filtersActive())) showResults(currentSearchTerm);
+  if (currentSearchTerm || filtersActive()) showResults(currentSearchTerm);
   else if (currentCategory) showList(currentCategory);
   else setView("home");
 }
@@ -1041,6 +1052,8 @@ filterToggle.addEventListener("click", () => {
 });
 Object.values(FL).forEach((el) => {
   el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+    // Kategorie-Pulldown übernimmt die Kategorie-Auswahl der Kachel
+    if (el === FL.kategorie) currentCategory = null;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(applyHomeState, 150);
   });
