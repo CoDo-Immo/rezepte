@@ -210,6 +210,7 @@ ul.zutaten li{ border-bottom:1px dashed var(--line); padding-bottom:7px; font-si
   display:block; background:none; border:none; padding:2px 0; margin:0; font:inherit; font-size:.92rem;
   color:inherit; text-align:left; cursor:pointer;
 }
+.wine-box .wine-reason{ margin:8px 0 0; font-size:.86rem; line-height:1.45; color:var(--muted); font-style:italic; white-space:pre-line; }
 .wine-box .wine-link:hover{ text-decoration:underline; color:var(--accent-2); }
 .link-box{ margin-top:22px; background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
 .link-box .lt{ font-weight:700; color:var(--accent); font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
