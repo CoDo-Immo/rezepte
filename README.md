@@ -10,10 +10,14 @@ also direkt über GitHub Pages oder jeden anderen statischen Hoster ausliefern.
 - Startseite mit Kategorie-Kacheln (Anzahl Rezepte pro Kategorie)
 - Volltextsuche über Titel, Zutaten und Zubereitung
 - Detailansicht mit Zutaten, Zubereitung, Notizen, Quelle
-- Weinempfehlung-Box in der Detailansicht, falls ein Rezept mit
-  `wein_empfehlung_ids` auf die `wines`-Tabelle verweist; im Formular per
-  Such-Auswahl (Autocomplete + entfernbare Chips) aus dem Weinkeller wählbar
-  — erfordert Login, da die `wines`-Tabelle nur für angemeldete Nutzer lesbar
+- Weinempfehlung (ab 3.0): Tabelle `rezept_weine`, eine Zeile pro Rezept und
+  Wein ohne Jahrgang (`wein_name` + `weingut` wie in `wines`) mit eigener
+  `begruendung`. Die Jahrgänge werden beim Anzeigen aus `wines` aufgelöst (im
+  Keller = Status Aktiv/Bestellt, sonst Hinweis «nicht im Keller»). Sortierung
+  nach Weinfarbe und Name. Im Formular per Such-Auswahl wählbar, mit Textfeld pro
+  Wein für die Begründung. Ein Trigger auf `wines` zieht Umbenennungen nach.
+  Die alten Felder `rezepte.wein_empfehlung_ids` und `rezepte.wein_begruendung`
+  werden nicht mehr gelesen oder geschrieben — erfordert Login, da die `wines`-Tabelle nur für angemeldete Nutzer lesbar
   ist (gleiche Privatsphäre-Regel wie in der Weinkeller-App)
 - Wein-Popup (ab 2.0): Die Weine der Weinempfehlung sind anklickbar und öffnen
   ein Popup mit Details aus der `wines`-Tabelle (Bild, Herkunft, Degustation,
