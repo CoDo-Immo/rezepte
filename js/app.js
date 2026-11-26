@@ -20,6 +20,7 @@ let RECIPES = [];
 let CATEGORIES = []; // aktive Kategorien aus Tabelle `kategorien`, sortiert
 let WINES_BY_ID = {};
 let ALL_WINES = null;
+let WINE_GROUPS = null; // Weine ohne Jahrgang (Name + Weingut) -> { name, weingut, typ, vintages }
 let currentCategory = null;
 let currentSearchTerm = "";
 let REBSORTEN = null;
@@ -90,7 +91,7 @@ async function loadRecipes() {
   recipeList.innerHTML = `<div class="loading-state">Lade Rezepte …</div>`;
   const { data, error } = await supabase
     .from("rezepte")
-    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, wein_begruendung, verknuepfte_rezepte_ids, erfasst_am")
+    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, verknuepfte_rezepte_ids, erfasst_am, rezept_weine(id, wein_name, weingut, begruendung)")
     .order("titel", { ascending: true });
   if (error) {
     showToast("Fehler beim Laden der Rezepte: " + error.message, true);
@@ -144,10 +145,40 @@ function renderFooter() {
 // Lädt einmalig alle Weine (für Anzeige + Such-Auswahl in der Weinempfehlung).
 async function ensureWinesLoaded() {
   if (ALL_WINES) return ALL_WINES;
-  const { data, error } = await supabase.from("wines").select("id, name, weingut, jahr").order("name", { ascending: true });
+  const { data, error } = await supabase.from("wines").select("id, name, weingut, jahr, typ, status").order("name", { ascending: true });
   ALL_WINES = error ? [] : (data || []);
   ALL_WINES.forEach((w) => { WINES_BY_ID[w.id] = w; });
+  WINE_GROUPS = new Map();
+  ALL_WINES.forEach((w) => {
+    const k = wineKey(w.name, w.weingut);
+    if (!WINE_GROUPS.has(k)) WINE_GROUPS.set(k, { key: k, name: w.name, weingut: w.weingut || "", typ: w.typ, vintages: [] });
+    WINE_GROUPS.get(k).vintages.push(w);
+  });
+  WINE_GROUPS.forEach((g) => g.vintages.sort((a, b) => (a.jahr || 0) - (b.jahr || 0)));
   return ALL_WINES;
+}
+
+// ---------- Weinempfehlung pro Wein (Tabelle `rezept_weine`) ----------
+// Eine Empfehlung gilt für einen Wein ohne Jahrgang (Name + Weingut). Die Jahrgänge
+// werden beim Anzeigen aus `wines` aufgelöst (im Keller = Status Aktiv oder Bestellt).
+const WINE_TYPE_ORDER = ["Rotwein", "Weisswein", "Schaumwein", "Süsswein", "Alkoholfrei"];
+const IN_CELLAR = ["Aktiv", "Bestellt"];
+function wineKey(name, weingut) { return `${name || ""}\u0000${weingut || ""}`; }
+function typeRank(t) { const i = WINE_TYPE_ORDER.indexOf(t); return i < 0 ? 99 : i; }
+function entryLabel(e) { return `${e.wein_name}${e.weingut ? " – " + e.weingut : ""}`; }
+function sortWineEntries(list) {
+  return list.sort((a, b) => typeRank(a.typ) - typeRank(b.typ) || String(a.wein_name).localeCompare(String(b.wein_name), "de"));
+}
+// Empfehlungen eines Rezepts, angereichert (Typ, Popup-Jahrgang, im Keller?) und sortiert nach Weinfarbe und Name.
+// Setzt voraus, dass ensureWinesLoaded() gelaufen ist.
+function recipeWines(r) {
+  return sortWineEntries((r.rezept_weine || []).map((e) => enrichWineEntry(e)));
+}
+function enrichWineEntry(e) {
+  const g = WINE_GROUPS && WINE_GROUPS.get(wineKey(e.wein_name, e.weingut));
+  const inCellar = g ? g.vintages.filter((v) => IN_CELLAR.includes(v.status)) : [];
+  const popup = inCellar.length ? inCellar[inCellar.length - 1] : (g ? g.vintages[g.vintages.length - 1] : null);
+  return { ...e, typ: g ? g.typ : null, label: entryLabel(e), popupId: popup ? popup.id : null, inCellar: inCellar.length > 0 };
 }
 
 function wineLabel(w) {
@@ -308,12 +339,12 @@ function matchesFilters(r) {
     if (FL.erfasstMode.value === "younger" && !(r.erfasst_am > FL.erfasstDate.value)) return false;
     if (FL.erfasstMode.value === "older" && !(r.erfasst_am < FL.erfasstDate.value)) return false;
   }
-  const ids = (r.wein_empfehlung_ids || []).filter(Boolean);
-  if (FL.wein.value === "with" && !ids.length) return false;
-  if (FL.wein.value === "without" && ids.length) return false;
+  const recW = r.rezept_weine || [];
+  if (FL.wein.value === "with" && !recW.length) return false;
+  if (FL.wein.value === "without" && recW.length) return false;
   const wt = FL.weinText.value.trim().toLowerCase();
   if (wt) {
-    if (!ids.some((id) => WINES_BY_ID[id] && wineLabel(WINES_BY_ID[id]).toLowerCase().includes(wt))) return false;
+    if (!recW.some((e) => entryLabel(e).toLowerCase().includes(wt))) return false;
   }
   return true;
 }
@@ -404,13 +435,12 @@ async function showDetail(r, opts = {}) {
   }
 
   let wineHtml = "";
-  const wineIds = (r.wein_empfehlung_ids || []).filter(Boolean);
-  if (wineIds.length) {
+  if ((r.rezept_weine || []).length) {
     await ensureWinesLoaded();
-    const ws = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean);
-    if (ws.length) {
-      wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${ws.map((w) => `<button type="button" class="wv wine-link" data-wine-id="${esc(w.id)}" title="Weindetails anzeigen">${esc(wineLabel(w))}</button>`).join("")}${r.wein_begruendung ? `<p class="wine-reason">${esc(r.wein_begruendung)}</p>` : ""}</div></div>`;
-    }
+    const ws = recipeWines(r);
+    wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div class="wine-list"><div class="wt">Weinempfehlung</div>${ws.map((w) => `<div class="wine-item">${w.popupId
+      ? `<button type="button" class="wv wine-link" data-wine-id="${esc(w.popupId)}" title="Weindetails anzeigen">${esc(w.label)}</button>`
+      : `<span class="wv">${esc(w.label)}</span>`}${w.inCellar ? "" : ` <span class="wine-out">nicht im Keller</span>`}${w.begruendung ? `<p class="wine-reason">${esc(w.begruendung)}</p>` : ""}</div>`).join("")}</div></div>`;
   }
 
   const linked = linkedRecipes(r);
@@ -455,10 +485,9 @@ function linkedRecipes(r) {
 const PDF_CACHE = new Map(); // recipe.id -> { sig, promise }
 
 async function wineLabelsFor(r) {
-  const ids = (r.wein_empfehlung_ids || []).filter(Boolean);
-  if (!ids.length) return [];
+  if (!(r.rezept_weine || []).length) return [];
   await ensureWinesLoaded();
-  return ids.map((id) => WINES_BY_ID[id]).filter(Boolean).map(wineLabel);
+  return recipeWines(r).map((w) => ({ label: w.label, begruendung: w.begruendung || "" }));
 }
 
 function getRecipePdf(r) {
@@ -557,18 +586,19 @@ function renderDetailActions(r) {
 
 // ---------- form (neu / bearbeiten) ----------
 async function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], wein_begruendung: "", verknuepfte_rezepte_ids: [], erfasst_am: todayIso() };
+  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, rezept_weine: [], verknuepfte_rezepte_ids: [], erfasst_am: todayIso() };
   let bewertung = r.bewertung || 0;
   let selectedImageFile = null;
   let imageRemoved = false;
   const originalBildUrl = r.bild_url || null;
-  let selectedWineIds = [...(r.wein_empfehlung_ids || [])];
+  let selectedWines = []; // { wein_name, weingut, begruendung, typ, ... } – nach ensureWinesLoaded gefüllt
   let selectedLinkIds = [...(r.verknuepfte_rezepte_ids || [])];
 
   detailActions.hidden = true;
   shareBtn.hidden = true;
   detailBody.innerHTML = `<div class="loading-state">Lade Formular …</div>`;
   await ensureWinesLoaded();
+  selectedWines = recipeWines(r);
   setView("detail");
   detailBody.innerHTML = `
     <h2 style="margin-top:0">${existing ? "Rezept bearbeiten" : "Neues Rezept"}</h2>
@@ -641,15 +671,11 @@ async function showForm(existing) {
       <div class="field span-2">
         <label for="f-wein-search">Weinempfehlung</label>
         <div class="wine-picker">
-          <div class="wine-chips" id="f-wine-chips"></div>
+          <div class="wine-rows" id="f-wine-rows"></div>
           <input id="f-wein-search" type="text" placeholder="Wein suchen, z. B. Name oder Weingut …" autocomplete="off">
           <div class="wine-suggestions" id="f-wine-suggestions" hidden></div>
         </div>
-        <p class="field-hint">${ALL_WINES && ALL_WINES.length ? "Aus dem Weinkeller auswählen." : "Keine Weine im Weinkeller gefunden."}</p>
-      </div>
-      <div class="field span-2">
-        <label for="f-wein-begruendung">Begründung Weinempfehlung</label>
-        <textarea id="f-wein-begruendung" rows="3" placeholder="Warum passen diese Weine zum Gericht?">${esc(r.wein_begruendung)}</textarea>
+        <p class="field-hint">${ALL_WINES && ALL_WINES.length ? "Aus dem Weinkeller auswählen (gilt für alle Jahrgänge), Begründung pro Wein." : "Keine Weine im Weinkeller gefunden."}</p>
       </div>
       <div class="field span-2">
         <label for="f-link-search">Verknüpfte Rezepte (Siehe auch)</label>
@@ -704,39 +730,44 @@ async function showForm(existing) {
     imageRemoveBtn.hidden = true;
   });
 
-  // ---- Weinempfehlung-Auswahl ----
-  const wineChipsEl = document.getElementById("f-wine-chips");
+  // ---- Weinempfehlung-Auswahl (pro Wein ohne Jahrgang, mit Begründung) ----
+  const wineRowsEl = document.getElementById("f-wine-rows");
   const wineSearchEl = document.getElementById("f-wein-search");
   const wineSuggestionsEl = document.getElementById("f-wine-suggestions");
-  function renderWineChips() {
-    wineChipsEl.innerHTML = selectedWineIds.map((id) => {
-      const w = WINES_BY_ID[id];
-      const label = w ? wineLabel(w) : id;
-      return `<span class="chip" data-id="${esc(id)}">${esc(label)}<button type="button" class="chip-remove" data-id="${esc(id)}" aria-label="Entfernen">×</button></span>`;
-    }).join("");
-    wineChipsEl.querySelectorAll(".chip-remove").forEach((btn) => {
+  function renderWineRows() {
+    sortWineEntries(selectedWines);
+    wineRowsEl.innerHTML = selectedWines.map((w, i) => `
+      <div class="wine-row">
+        <div class="wine-row-head"><span>${esc(w.label)}${w.inCellar ? "" : ` <span class="wine-out">nicht im Keller</span>`}</span><button type="button" class="chip-remove" data-i="${i}" aria-label="Entfernen">×</button></div>
+        <textarea rows="2" data-i="${i}" placeholder="Warum passt dieser Wein zum Gericht?">${esc(w.begruendung || "")}</textarea>
+      </div>`).join("");
+    wineRowsEl.querySelectorAll(".chip-remove").forEach((btn) => {
       btn.addEventListener("click", () => {
-        selectedWineIds = selectedWineIds.filter((id) => id !== btn.dataset.id);
-        renderWineChips();
+        selectedWines.splice(Number(btn.dataset.i), 1);
+        renderWineRows();
       });
     });
+    wineRowsEl.querySelectorAll("textarea").forEach((ta) => {
+      ta.addEventListener("input", () => { selectedWines[Number(ta.dataset.i)].begruendung = ta.value; });
+    });
   }
-  renderWineChips();
+  renderWineRows();
   function renderWineSuggestions(query) {
     const ql = query.trim().toLowerCase();
-    const pool = (ALL_WINES || []).filter((w) => !selectedWineIds.includes(w.id));
+    const taken = new Set(selectedWines.map((w) => wineKey(w.wein_name, w.weingut)));
+    const pool = [...(WINE_GROUPS ? WINE_GROUPS.values() : [])].filter((g) => !taken.has(g.key));
     const matches = ql
-      ? pool.filter((w) => wineLabel(w).toLowerCase().includes(ql)).slice(0, 8)
+      ? sortWineEntries(pool.map((g) => enrichWineEntry({ wein_name: g.name, weingut: g.weingut, begruendung: "" })).filter((e) => e.label.toLowerCase().includes(ql))).slice(0, 8)
       : [];
     if (!matches.length) { wineSuggestionsEl.hidden = true; wineSuggestionsEl.innerHTML = ""; return; }
-    wineSuggestionsEl.innerHTML = matches.map((w) => `<button type="button" class="wine-suggestion" data-id="${esc(w.id)}">${esc(wineLabel(w))}</button>`).join("");
+    wineSuggestionsEl.innerHTML = matches.map((e, i) => `<button type="button" class="wine-suggestion" data-i="${i}">${esc(e.label)} <span class="link-cat">${esc(e.typ || "")}${e.inCellar ? "" : " · nicht im Keller"}</span></button>`).join("");
     wineSuggestionsEl.hidden = false;
     wineSuggestionsEl.querySelectorAll(".wine-suggestion").forEach((btn) => {
       btn.addEventListener("click", () => {
-        selectedWineIds.push(btn.dataset.id);
+        selectedWines.push(matches[Number(btn.dataset.i)]);
         wineSearchEl.value = "";
         wineSuggestionsEl.hidden = true;
-        renderWineChips();
+        renderWineRows();
       });
     });
   }
@@ -798,8 +829,6 @@ async function showForm(existing) {
       zubereitung: document.getElementById("f-zubereitung").value,
       notizen: document.getElementById("f-notizen").value || null,
       quelle: document.getElementById("f-quelle").value || null,
-      wein_empfehlung_ids: selectedWineIds.length ? selectedWineIds : null,
-      wein_begruendung: document.getElementById("f-wein-begruendung").value.trim() || null,
       verknuepfte_rezepte_ids: selectedLinkIds.length ? selectedLinkIds : null,
       erfasst_am: document.getElementById("f-erfasst").value || todayIso(),
     };
@@ -823,7 +852,7 @@ async function showForm(existing) {
       saveBtn.textContent = "Speichern";
       return;
     }
-    await saveRecipe(payload, existing ? existing.id : null);
+    await saveRecipe(payload, existing ? existing.id : null, selectedWines);
   });
 }
 
@@ -833,20 +862,40 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function saveRecipe(payload, id) {
-  let error;
+async function saveRecipe(payload, id, wines) {
+  let error, data;
   if (id) {
     ({ error } = await supabase.from("rezepte").update(payload).eq("id", id));
   } else {
-    ({ error } = await supabase.from("rezepte").insert(payload));
+    ({ data, error } = await supabase.from("rezepte").insert(payload).select("id").single());
   }
   if (error) {
     showToast("Speichern fehlgeschlagen: " + error.message, true);
     return;
   }
-  showToast(id ? "Rezept aktualisiert." : "Rezept angelegt.");
+  const wErr = await saveRecipeWines(id || data.id, wines || []);
+  if (wErr) showToast("Rezept gespeichert, Weinempfehlung aber nicht: " + wErr.message, true);
+  else showToast(id ? "Rezept aktualisiert." : "Rezept angelegt.");
   await loadRecipes();
   goBack();
+}
+
+// Weinempfehlungen eines Rezepts in `rezept_weine` abgleichen (entfernte löschen, übrige anlegen/aktualisieren)
+async function saveRecipeWines(rid, wines) {
+  const { data: cur, error: e1 } = await supabase.from("rezept_weine").select("id, wein_name, weingut").eq("rezept_id", rid);
+  if (e1) return e1;
+  const keep = new Set(wines.map((w) => wineKey(w.wein_name, w.weingut)));
+  const del = (cur || []).filter((c) => !keep.has(wineKey(c.wein_name, c.weingut))).map((c) => c.id);
+  if (del.length) {
+    const { error } = await supabase.from("rezept_weine").delete().in("id", del);
+    if (error) return error;
+  }
+  if (wines.length) {
+    const rows = wines.map((w) => ({ rezept_id: rid, wein_name: w.wein_name, weingut: w.weingut, begruendung: (w.begruendung || "").trim() || null }));
+    const { error } = await supabase.from("rezept_weine").upsert(rows, { onConflict: "rezept_id,wein_name,weingut" });
+    if (error) return error;
+  }
+  return null;
 }
 
 function confirmDelete(r) {

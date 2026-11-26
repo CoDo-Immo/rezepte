@@ -69,7 +69,7 @@ function drawStar(doc, cx, cy, r, on) {
 /**
  * Baut das PDF eines Rezepts.
  * @param r        Rezept-Objekt aus der Tabelle `rezepte`
- * @param opts.wines       Array mit fertigen Weinbezeichnungen (Strings)
+ * @param opts.wines       Array mit { label, begruendung } (oder Strings) pro Wein
  * @param opts.image       optional { dataUrl, w, h } (JPEG, bereits zugeschnitten)
  * @returns {Promise<{blob: Blob, filename: string}>}
  */
@@ -175,25 +175,34 @@ export async function buildRecipePdf(r, { wines = [], image = null, linked = [] 
   }
 
   // --- Weinempfehlung ---
-  const weine = wines.map(pdfText).filter(Boolean);
+  // Pro Wein ein eigener Kasten, damit lange Listen sauber auf die nächste Seite umbrechen.
+  const weine = wines
+    .map((w) => (typeof w === "string" ? { label: w, begruendung: "" } : w))
+    .map((w) => ({ label: pdfText(w.label || ""), grund: pdfText(w.begruendung || "") }))
+    .filter((w) => w.label);
   if (weine.length) {
-    const wl = weine.flatMap((w) => wrap(w, CW - 12, 10.5));
-    const grund = pdfText(r.wein_begruendung || "");
-    const gl = grund ? grund.split(/\n+/).flatMap((g) => wrap(g, CW - 12, 9.5, "italic")) : [];
-    const boxH = 5 + lineH(8.5) + 1.5 + wl.length * lineH(10.5) + (gl.length ? 2 + gl.length * lineH(9.5) : 0) + 4;
-    ensure(boxH + 2);
-    doc.setFillColor(...TINT);
-    doc.roundedRect(MARGIN, y, CW, boxH, 2.5, 2.5, "F");
-    const top = y;
-    y += 5;
+    const items = weine.map((w) => {
+      const l = wrap(w.label, CW - 12, 10.5);
+      const g = w.grund ? w.grund.split(/\n+/).flatMap((x) => wrap(x, CW - 12, 9.5, "italic")) : [];
+      return { l, g, h: 3.5 + l.length * lineH(10.5) + (g.length ? 0.8 + g.length * lineH(9.5) : 0) + 3 };
+    });
+    ensure(lineH(8.5) + 2 + items[0].h);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     doc.setTextColor(...ACCENT_2);
-    doc.text("WEINEMPFEHLUNG", MARGIN + 6, y + 8.5 * PT * 0.82, { charSpace: 0.5 });
-    y += lineH(8.5) + 1.5;
-    writeLines(wl, MARGIN + 6, 10.5);
-    if (gl.length) { y += 2; writeLines(gl, MARGIN + 6, 9.5, { color: MUTED, style: "italic" }); }
-    y = top + boxH + 6;
+    doc.text("WEINEMPFEHLUNG", MARGIN, y + 8.5 * PT * 0.82, { charSpace: 0.5 });
+    y += lineH(8.5) + 2;
+    items.forEach((it) => {
+      ensure(it.h + 2);
+      doc.setFillColor(...TINT);
+      doc.roundedRect(MARGIN, y, CW, it.h, 2.5, 2.5, "F");
+      const top = y;
+      y += 3.5;
+      writeLines(it.l, MARGIN + 6, 10.5);
+      if (it.g.length) { y += 0.8; writeLines(it.g, MARGIN + 6, 9.5, { color: MUTED, style: "italic" }); }
+      y = top + it.h + 2;
+    });
+    y += 4;
   }
 
   // --- Siehe auch (verknüpfte Rezepte) ---
