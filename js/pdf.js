@@ -178,7 +178,9 @@ export async function buildRecipePdf(r, { wines = [], image = null, linked = [] 
   const weine = wines.map(pdfText).filter(Boolean);
   if (weine.length) {
     const wl = weine.flatMap((w) => wrap(w, CW - 12, 10.5));
-    const boxH = 5 + lineH(8.5) + 1.5 + wl.length * lineH(10.5) + 4;
+    const grund = pdfText(r.wein_begruendung || "");
+    const gl = grund ? grund.split(/\n+/).flatMap((g) => wrap(g, CW - 12, 9.5, "italic")) : [];
+    const boxH = 5 + lineH(8.5) + 1.5 + wl.length * lineH(10.5) + (gl.length ? 2 + gl.length * lineH(9.5) : 0) + 4;
     ensure(boxH + 2);
     doc.setFillColor(...TINT);
     doc.roundedRect(MARGIN, y, CW, boxH, 2.5, 2.5, "F");
@@ -190,6 +192,7 @@ export async function buildRecipePdf(r, { wines = [], image = null, linked = [] 
     doc.text("WEINEMPFEHLUNG", MARGIN + 6, y + 8.5 * PT * 0.82, { charSpace: 0.5 });
     y += lineH(8.5) + 1.5;
     writeLines(wl, MARGIN + 6, 10.5);
+    if (gl.length) { y += 2; writeLines(gl, MARGIN + 6, 9.5, { color: MUTED, style: "italic" }); }
     y = top + boxH + 6;
   }
 

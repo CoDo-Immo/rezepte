@@ -90,7 +90,7 @@ async function loadRecipes() {
   recipeList.innerHTML = `<div class="loading-state">Lade Rezepte …</div>`;
   const { data, error } = await supabase
     .from("rezepte")
-    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, verknuepfte_rezepte_ids, erfasst_am")
+    .select("id, titel, kategorie, portionen, zubereitungszeit_min, wartezeit_min, schwierigkeit, bewertung, zutaten, zubereitung, notizen, quelle, bild_url, wein_empfehlung_ids, wein_begruendung, verknuepfte_rezepte_ids, erfasst_am")
     .order("titel", { ascending: true });
   if (error) {
     showToast("Fehler beim Laden der Rezepte: " + error.message, true);
@@ -409,7 +409,7 @@ async function showDetail(r, opts = {}) {
     await ensureWinesLoaded();
     const ws = wineIds.map((id) => WINES_BY_ID[id]).filter(Boolean);
     if (ws.length) {
-      wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${ws.map((w) => `<button type="button" class="wv wine-link" data-wine-id="${esc(w.id)}" title="Weindetails anzeigen">${esc(wineLabel(w))}</button>`).join("")}</div></div>`;
+      wineHtml = `<div class="wine-box">${svg(WINE_ICON)}<div><div class="wt">Weinempfehlung</div>${ws.map((w) => `<button type="button" class="wv wine-link" data-wine-id="${esc(w.id)}" title="Weindetails anzeigen">${esc(wineLabel(w))}</button>`).join("")}${r.wein_begruendung ? `<p class="wine-reason">${esc(r.wein_begruendung)}</p>` : ""}</div></div>`;
     }
   }
 
@@ -557,7 +557,7 @@ function renderDetailActions(r) {
 
 // ---------- form (neu / bearbeiten) ----------
 async function showForm(existing) {
-  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], verknuepfte_rezepte_ids: [], erfasst_am: todayIso() };
+  const r = existing || { titel: "", kategorie: currentCategory || (CATEGORIES[0] && CATEGORIES[0].name) || "", portionen: "", zubereitungszeit_min: "", wartezeit_min: "", schwierigkeit: "", bewertung: 0, zutaten: "", zubereitung: "", notizen: "", quelle: "", bild_url: null, wein_empfehlung_ids: [], wein_begruendung: "", verknuepfte_rezepte_ids: [], erfasst_am: todayIso() };
   let bewertung = r.bewertung || 0;
   let selectedImageFile = null;
   let imageRemoved = false;
@@ -646,6 +646,10 @@ async function showForm(existing) {
           <div class="wine-suggestions" id="f-wine-suggestions" hidden></div>
         </div>
         <p class="field-hint">${ALL_WINES && ALL_WINES.length ? "Aus dem Weinkeller auswählen." : "Keine Weine im Weinkeller gefunden."}</p>
+      </div>
+      <div class="field span-2">
+        <label for="f-wein-begruendung">Begründung Weinempfehlung</label>
+        <textarea id="f-wein-begruendung" rows="3" placeholder="Warum passen diese Weine zum Gericht?">${esc(r.wein_begruendung)}</textarea>
       </div>
       <div class="field span-2">
         <label for="f-link-search">Verknüpfte Rezepte (Siehe auch)</label>
@@ -795,6 +799,7 @@ async function showForm(existing) {
       notizen: document.getElementById("f-notizen").value || null,
       quelle: document.getElementById("f-quelle").value || null,
       wein_empfehlung_ids: selectedWineIds.length ? selectedWineIds : null,
+      wein_begruendung: document.getElementById("f-wein-begruendung").value.trim() || null,
       verknuepfte_rezepte_ids: selectedLinkIds.length ? selectedLinkIds : null,
       erfasst_am: document.getElementById("f-erfasst").value || todayIso(),
     };
