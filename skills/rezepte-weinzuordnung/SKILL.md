@@ -10,6 +10,7 @@ Sprache: Deutsch. Direkt und sachlich, keine Schmeicheleien.
 ## Daten
 - Supabase-Projekt "Gourmet-Adlemsried" (Project-ID vzsmjneerahucqwisouv), Tabellen `rezepte`, `wines`, `kategorien`.
 - `rezepte.wein_empfehlung_ids` = text[] mit `wines.id` (kein FK). Es sind einzelne Jahrgänge (je Jahrgang eine ID).
+- `rezepte.wein_begruendung` = text, eine Begründung pro Rezept für alle verknüpften Weine zusammen (wird in der App unter der Weinempfehlung und im PDF angezeigt).
 - `wines`: typ ('Rotwein','Weisswein','Schaumwein','Süsswein','Alkoholfrei'), name, jahr, sorte, koerper, saeure, tannin, eignung, ausbau, status, anzahl, trinkreife_ab, trinkreife.
 - Projektordner lokal: LLM_Projekte/projekte/Rezepte (KONTEXT.md, ENTSCHEIDE.md, SESSION_LOG.md).
 
@@ -51,3 +52,6 @@ Sprache: Deutsch. Direkt und sachlich, keine Schmeicheleien.
 - Hinweis auf schwache Passungen, Weine mit Status 'Bestellt' und dünne Quellenlage.
 - Sources-Liste mit Links.
 - Bei Weinempfehlungen zu Gerichten immer auch einen Rotweinvorschlag machen (stehende Vorgabe von Gian).
+
+## Begründung pflegen (seit 25.11.2026)
+Bei jedem Rezept, dessen Weine sich ändern, `rezepte.wein_begruendung` im selben UPDATE neu schreiben: 1–2 Sätze (ca. 20–40 Wörter), welche Komponente des Gerichts welchen Wein trägt und warum (Körper, Säure, Tannin, Ausbau, Eignung laut Weindaten oder Quelle), ohne Jahrgänge. Schwache Passungen als «eher schwach» kennzeichnen. Wird der letzte Wein entfernt, Begründung auf NULL setzen. Kontrolle: kein Rezept mit Weinen ohne Begründung.
